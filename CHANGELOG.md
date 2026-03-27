@@ -2,6 +2,13 @@
 
 ## [2026-03-26]
 
+### Added (Task 1.9 — Worker task orchestration and end-to-end pipeline)
+- Implement `app/worker/tasks.py`: `process_analysis()` orchestrating all 5 pipeline stages (frames → pose → features → DTW → feedback) with per-stage timing logs, try/finally cleanup, and status transitions to `completed`/`failed`
+- Add `app/services/s3.py` `download_video()`: downloads video from S3 to local path; falls back to local `uploads/` copy in dev
+- Add `backend/run_worker.py`: RQ worker entry point (`uv run python run_worker.py`)
+- Update `app/routers/upload.py` confirm endpoint to enqueue `process_analysis` (was `run_analysis` stub)
+- Add `scripts/test_e2e.py`: manual end-to-end test that creates a synthetic video, runs the full pipeline with mocked pose estimation, and asserts all DB result fields are populated
+
 ### Added (Task 1.8 — Claude feedback generator)
 - Implement `app/worker/feedback_generator.py`: async `generate_coaching_feedback()` calling `claude-sonnet-4-20250514` with structured deviation data; parses JSON response into `CoachingFeedback` dataclass (summary, overall_assessment, priority_fixes, positive_notes, drill_plan)
 - Add `Fix` and `Drill` dataclasses with full field set (title, explanation, target_metric, current/target value; name, description, duration, frequency, focus_area)

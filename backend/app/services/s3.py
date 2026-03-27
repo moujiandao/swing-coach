@@ -55,6 +55,26 @@ def generate_presigned_upload_url(key: str, content_type: str = "video/mp4") -> 
         raise
 
 
+def download_video(s3_key: str, local_path: str) -> None:
+    """
+    Download a video from S3 (or local uploads dir) to local_path.
+
+    In local dev (no S3_BUCKET set), copies the file from the uploads/ directory.
+    In production, uses boto3 download_file.
+    """
+    import shutil
+
+    if not _is_s3_configured():
+        src = _LOCAL_UPLOAD_DIR / s3_key
+        shutil.copy2(src, local_path)
+        logger.info("Local dev — copied %s → %s", src, local_path)
+        return
+
+    settings = get_settings()
+    _s3_client().download_file(settings.s3_bucket, s3_key, local_path)
+    logger.info("Downloaded s3://%s/%s → %s", settings.s3_bucket, s3_key, local_path)
+
+
 def generate_presigned_download_url(key: str) -> str:
     """
     Returns a presigned GET URL for video playback (expires in 1 hour).
