@@ -1,6 +1,6 @@
 # Changelog
 
-## [2026-03-26]
+## [2026-03-27]
 
 ### Added (Task 1.9 — Worker task orchestration and end-to-end pipeline)
 - Implement `app/worker/tasks.py`: `process_analysis()` orchestrating all 5 pipeline stages (frames → pose → features → DTW → feedback) with per-stage timing logs, try/finally cleanup, and status transitions to `completed`/`failed`
@@ -29,6 +29,8 @@
 - Add `detect_phases()` based on wrist x-velocity sign changes and peak wrist speed
 - Support left-hand mirroring (swap hitting-arm landmark indices)
 - Add 24 tests in `tests/test_feature_engine.py`: angle geometry, velocity smoothing, phase detection, integration, and handedness mirroring — all passing
+
+## [2026-03-26]
 
 ### Added (Task 1.5 — MediaPipe pose estimation)
 - Add MediaPipe pose estimation pipeline stage (`app/worker/pose_estimator.py`) using Tasks API (0.10+) with auto-download of heavy model, linear interpolation for missing frames, and `LANDMARK_NAMES` constant for all 33 BlazePose landmarks
