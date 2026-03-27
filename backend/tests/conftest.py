@@ -4,7 +4,9 @@ Shared pytest fixtures.
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pytest
+from PIL import Image as PILImage
 
 
 @pytest.fixture(scope="session")
@@ -75,3 +77,22 @@ def synthetic_video_too_long(tmp_path_factory) -> str:
         check=True,
     )
     return str(out)
+
+
+@pytest.fixture(scope="session")
+def blank_frame_paths(tmp_path_factory) -> list[str]:
+    """
+    10 solid-white 320x240 PNG files.
+
+    Used by pose estimator tests that need real image files cv2 can open but
+    where MediaPipe is mocked — or where we specifically want zero detections
+    to trigger the ValueError path.
+    """
+    d = tmp_path_factory.mktemp("blank_frames")
+    white = np.ones((240, 320, 3), dtype=np.uint8) * 255
+    paths = []
+    for i in range(10):
+        p = d / f"frame_{i:05d}.png"
+        PILImage.fromarray(white).save(str(p))
+        paths.append(str(p))
+    return paths
