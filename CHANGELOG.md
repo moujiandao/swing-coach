@@ -2,6 +2,13 @@
 
 ## [2026-03-26]
 
+### Added (Task 1.7 — DTW comparator and pro reference loader)
+- Implement `app/pro_references/loader.py`: `ProReferenceDB` class (load/query .npz files) and `save_reference()` helper; keys follow `{player}_{stroke_type}` convention
+- Implement `app/worker/dtw_comparator.py`: `compare_swing()` with phase-segmented DTW, exponential score decay (scale=50), 5-phase weighted overall score, and `Deviation` dataclass with human-readable descriptions
+- Add `scripts/generate_synthetic_reference.py`: generates a 60-frame synthetic forehand reference using parameterized sine curves; saves to `app/pro_references/data/synthetic_forehand.npz`
+- Add `scripts/build_pro_references.py`: end-to-end pipeline script (video → frames → pose → features → .npz) for processing real pro videos
+- Add 19 tests in `tests/test_dtw_comparator.py`: identical/different swing scores, deviation sorting, phase weighting, ProReferenceDB round-trip, synthetic reference integration — all passing
+
 ### Added (Task 1.6 — Feature extraction and phase segmentation)
 - Implement `app/worker/feature_engine.py`: `extract_features()` producing joint angles (6 keys), smoothed velocities (3 keys), 5-phase segmentation, and contact frame index
 - Add `compute_angle()` helper using arccos for stable [0,360) degree output
