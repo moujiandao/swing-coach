@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import health
+from app.routers import analysis, health, upload
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,9 +41,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router, prefix="/api")
-    # upload and analysis routers added in later tasks
-    # app.include_router(upload.router, prefix="/api")
-    # app.include_router(analysis.router, prefix="/api")
+    app.include_router(upload.router, prefix="/api")
+    app.include_router(analysis.router, prefix="/api")
 
     return app
 

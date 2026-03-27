@@ -82,6 +82,17 @@ class AnalysisCreate(BaseModel):
     pro_reference: str = "federer"
 
 
+class UploadInitResponse(BaseModel):
+    analysis_id: str
+    upload_url: str
+    s3_key: str
+
+
+class ConfirmResponse(BaseModel):
+    analysis_id: str
+    status: str
+
+
 class AnalysisResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
