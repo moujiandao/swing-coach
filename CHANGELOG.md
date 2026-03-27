@@ -2,6 +2,13 @@
 
 ## [2026-03-27]
 
+### Added (Task 2.4 — History page and navigation polish)
+- Create `src/pages/History.jsx`: fetches `GET /api/history`, skeleton loading (3 pulse cards), color-coded score + status badge cards, empty state with CTA, click navigates to `/analysis/:id`
+- Create `src/pages/NotFound.jsx`: 404 page for unknown routes via `<Route path="*">`
+- Create `src/components/Spinner.jsx`: reusable animated ring, size via `className` prop
+- Create `src/components/ErrorBoundary.jsx`: class component catching render errors, shows message + Go Home link
+- Update `src/App.jsx`: logo as `<Link>`, footer ("Built by Brian - Powered by MediaPipe + Claude"), 404 route, `ErrorBoundary` wrapping all routes, `flex flex-col` layout so footer stays at bottom
+
 ### Added (Task 2.3 — Analysis results page)
 - Create `src/hooks/useAnalysis.js`: polls `GET /api/analysis/{id}` every 2s, stops on `completed`/`failed`, returns `{ analysis, isLoading, error, isProcessing }`
 - Create `src/components/ProcessingState.jsx`: spinner with staggered stage-hint dots
