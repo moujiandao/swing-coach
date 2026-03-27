@@ -2,6 +2,10 @@
 
 ## [2026-03-27]
 
+### Added (Task 2.2 — Video upload page)
+- Create `src/components/VideoUploader.jsx`: react-dropzone with MP4/MOV/QuickTime accept, 100 MB max, file name+size display, `<video>` preview via `URL.createObjectURL`, upload progress bar
+- Build full `src/pages/Upload.jsx`: 7-option stroke type card selector, pro reference dropdown (Federer/Nadal/Djokovic/Synthetic), `createAnalysis` → S3 PUT → `confirmUpload` → navigate flow with `onUploadProgress` tracking, `file://` dev fallback to multipart POST, error banner, disabled-until-ready Analyze button
+
 ### Added (Task 2.1 — Frontend scaffolding)
 - Create `frontend/` React app (Vite + React 19) with Tailwind CSS v4 CSS-based config and `@tailwindcss/vite` plugin
 - Set up react-router-dom v7 with three routes: `/` (Upload), `/analysis/:id` (Analysis), `/history` (History)
