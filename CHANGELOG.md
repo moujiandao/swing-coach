@@ -2,6 +2,12 @@
 
 ## [2026-03-26]
 
+### Added (Task 1.8 — Claude feedback generator)
+- Implement `app/worker/feedback_generator.py`: async `generate_coaching_feedback()` calling `claude-sonnet-4-20250514` with structured deviation data; parses JSON response into `CoachingFeedback` dataclass (summary, overall_assessment, priority_fixes, positive_notes, drill_plan)
+- Add `Fix` and `Drill` dataclasses with full field set (title, explanation, target_metric, current/target value; name, description, duration, frequency, focus_area)
+- Add retry logic: on JSON parse failure, re-prompts Claude with explicit "respond only in valid JSON" nudge before raising `ValueError`
+- Add 19 tests in `tests/test_feedback_generator.py`: prompt construction, JSON parsing, field validation, cap enforcement — 13 run without API key, 6 live tests skip unless `ANTHROPIC_API_KEY` is set
+
 ### Added (Task 1.7 — DTW comparator and pro reference loader)
 - Implement `app/pro_references/loader.py`: `ProReferenceDB` class (load/query .npz files) and `save_reference()` helper; keys follow `{player}_{stroke_type}` convention
 - Implement `app/worker/dtw_comparator.py`: `compare_swing()` with phase-segmented DTW, exponential score decay (scale=50), 5-phase weighted overall score, and `Deviation` dataclass with human-readable descriptions
