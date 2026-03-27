@@ -38,6 +38,9 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 
+# Temp / scratch
+tmp/
+
 # OS
 .DS_Store
 Thumbs.db
