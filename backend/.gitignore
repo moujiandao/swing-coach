@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Type checking
+.mypy_cache/
+.pyright/
+
+# Database (local dev only)
+*.db
+*.sqlite
+*.sqlite3
+
+# MediaPipe model cache
+~/.cache/mediapipe/
+
+# NumPy reference data (generated, not committed)
+*.npy
+*.npz
+
+# Uploads directory (local dev fallback)
+uploads/
+
+# macOS
+.DS_Store

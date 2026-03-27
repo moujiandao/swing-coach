@@ -2,6 +2,15 @@
 
 ## [2026-03-27]
 
+### Fixed (verify.py and dependency setup — post-sprint audit)
+- Fix `backend/pyproject.toml`: move pytest/pytest-asyncio/aiosqlite from `[project.optional-dependencies]` to `[dependency-groups]` so `uv sync` installs them by default
+- Create `backend/.gitignore`: Python, venv, .env, test cache, *.npy, local uploads dir
+- Fix `scripts/verify.py`: replace `uv run pytest` with `uv run python -m pytest` (script wasn't in PATH)
+- Fix `scripts/verify.py`: replace shell `timeout` + `&` background job with Python `subprocess.Popen` + `urllib` polling (GNU `timeout` not available on macOS)
+- Fix `scripts/verify.py`: correct script paths (`backend/scripts/` → `scripts/`) for `generate_synthetic_reference.py` and `test_e2e.py`
+- Fix `scripts/verify.py`: narrow secrets grep from `aws_secret` (matched field names) to actual key format patterns (`sk-ant-api`, `AKIA[A-Z0-9]`)
+- Result: `python3 scripts/verify.py all` → 102 passed, 0 failed
+
 ### Added (Task 2.5 — Full integration and deployment prep)
 - Create `docker-compose.yml`: redis, backend, worker, frontend services with health checks and shared REDIS_URL override
 - Create `backend/Dockerfile`: Python 3.11-slim + ffmpeg via apt, uv, layer-cached dependency install
