@@ -2,6 +2,15 @@
 
 ## [2026-03-27]
 
+### Added (Task 2.5 — Full integration and deployment prep)
+- Create `docker-compose.yml`: redis, backend, worker, frontend services with health checks and shared REDIS_URL override
+- Create `backend/Dockerfile`: Python 3.11-slim + ffmpeg via apt, uv, layer-cached dependency install
+- Create `frontend/Dockerfile`: Node 20-alpine multi-stage (dev/build/prod targets)
+- Create `backend/Procfile`: Railway-compatible `web` and `worker` process types
+- Create `README.md`: project description, architecture diagram, local dev setup, env vars table, pro reference build guide, deploy instructions, tech stack
+- Create `scripts/dev_setup.sh`: checks python/uv/node/npm/ffmpeg/redis, installs deps, creates .env from example, generates synthetic reference
+- Update `frontend/vite.config.js`: add `/api` proxy to `http://localhost:8000` for local dev without CORS friction
+
 ### Added (Task 2.4 — History page and navigation polish)
 - Create `src/pages/History.jsx`: fetches `GET /api/history`, skeleton loading (3 pulse cards), color-coded score + status badge cards, empty state with CTA, click navigates to `/analysis/:id`
 - Create `src/pages/NotFound.jsx`: 404 page for unknown routes via `<Route path="*">`
