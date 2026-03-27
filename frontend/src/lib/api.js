@@ -10,7 +10,7 @@ const api = axios.create({
  * @returns {{ analysis_id: string, upload_url: string }}
  */
 export async function createAnalysis(strokeType, proReference) {
-  const { data } = await api.post('/api/upload/create', { stroke_type: strokeType, pro_reference: proReference })
+  const { data } = await api.post('/api/upload', { stroke_type: strokeType, pro_reference: proReference })
   return data
 }
 
@@ -19,7 +19,7 @@ export async function createAnalysis(strokeType, proReference) {
  * @returns {{ status: string }}
  */
 export async function confirmUpload(analysisId) {
-  const { data } = await api.post(`/api/upload/confirm/${analysisId}`)
+  const { data } = await api.post(`/api/upload/${analysisId}/confirm`)
   return data
 }
 

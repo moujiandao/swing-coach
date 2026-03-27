@@ -2,6 +2,12 @@
 
 ## [2026-03-27]
 
+### Fixed (Analyze Swing button — "Not Found" error on upload)
+- Fix `frontend/src/lib/api.js`: correct `createAnalysis` endpoint from `/api/upload/create` to `/api/upload`
+- Fix `frontend/src/lib/api.js`: correct `confirmUpload` endpoint from `/api/upload/confirm/{id}` to `/api/upload/{id}/confirm`
+- Add `POST /api/upload/local/{analysis_id}` endpoint to `backend/app/routers/upload.py`: receives multipart video and writes it to the local `uploads/` directory for dev environments without S3 configured
+- Fix: run `alembic upgrade head` to create missing `analyses` table in local SQLite (table existed only as alembic metadata, causing 500 on all upload requests)
+
 ### Added
 - Add interactive HTML pipeline diagram (`docs/pipeline-diagram.html`): expandable stage cards showing function signatures, internal logic, and output dataclasses with exact field types and shapes; typed arrow connectors between stages; color-coded by concern (extraction, analysis, intelligence, storage)
 

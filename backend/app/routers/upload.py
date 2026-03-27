@@ -1,8 +1,9 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +89,31 @@ async def confirm_upload(
 
     logger.info("Upload confirmed — analysis_id=%s enqueued", analysis_id)
     return ConfirmResponse(analysis_id=str(analysis_id), status=AnalysisStatus.processing.value)
+
+
+@router.post("/local/{analysis_id}", status_code=status.HTTP_200_OK)
+async def local_upload(
+    analysis_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Local dev fallback: receives multipart video upload and writes it to the
+    uploads/ directory path stored in analysis.video_s3_key.
+    Only used when S3_BUCKET is not configured (file:// presigned URL path).
+    """
+    result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+    analysis = result.scalar_one_or_none()
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+
+    dest = Path("uploads") / analysis.video_s3_key
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    content = await file.read()
+    dest.write_bytes(content)
+
+    logger.info("Local upload saved — analysis_id=%s path=%s", analysis_id, dest)
+    return {"ok": True}
 
 
 def _enqueue_analysis_job(analysis_id: str) -> None:

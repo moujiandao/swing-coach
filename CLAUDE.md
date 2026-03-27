@@ -171,3 +171,35 @@ npm run dev                          # Dev server on :5173
 cd scripts
 python build_pro_references.py --video path/to/pro_video.mp4 --stroke forehand --player federer
 ```
+
+
+## How to Receive Bug Fixes / Feature Requests
+
+When I give you a task, I'll use this format. Follow the constraints exactly.
+
+### Bug Fix Format
+- **Stage**: which pipeline stage
+- **File**: the specific file(s)
+- **Error**: what's happening
+- **Expected**: what should happen
+- **Constraints**: what NOT to touch
+
+### Feature Request Format
+- **What**: the feature in one sentence
+- **Where**: which files/layers are affected
+- **Acceptance criteria**: how to verify it works
+- **Constraints**: scope boundaries
+
+### After Every Fix or Feature
+1. Run the relevant test suite
+2. Run the full suite (uv run pytest tests/ -v)
+3. Update CHANGELOG.md
+4. If the fix revealed something non-obvious, add it to
+   the "Non-Obvious Decisions" or a "Known Edge Cases" 
+   section in this CLAUDE.md
+
+## Git Conventions
+- Commit after every completed bug fix or feature, not mid-work
+- Format: "fix: ...", "feat: ...", "tune: ..." prefix
+- Never commit .env, __pycache__, or .npy files
+- Run full test suite before committing
