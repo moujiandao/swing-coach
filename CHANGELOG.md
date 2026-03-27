@@ -2,6 +2,14 @@
 
 ## [2026-03-26]
 
+### Added (Task 1.6 — Feature extraction and phase segmentation)
+- Implement `app/worker/feature_engine.py`: `extract_features()` producing joint angles (6 keys), smoothed velocities (3 keys), 5-phase segmentation, and contact frame index
+- Add `compute_angle()` helper using arccos for stable [0,360) degree output
+- Add `compute_velocity()` using Savitzky-Golay smoothing (window=7, polyorder=2) for noise reduction
+- Add `detect_phases()` based on wrist x-velocity sign changes and peak wrist speed
+- Support left-hand mirroring (swap hitting-arm landmark indices)
+- Add 24 tests in `tests/test_feature_engine.py`: angle geometry, velocity smoothing, phase detection, integration, and handedness mirroring — all passing
+
 ### Added (Task 1.5 — MediaPipe pose estimation)
 - Add MediaPipe pose estimation pipeline stage (`app/worker/pose_estimator.py`) using Tasks API (0.10+) with auto-download of heavy model, linear interpolation for missing frames, and `LANDMARK_NAMES` constant for all 33 BlazePose landmarks
 - Add `blank_frame_paths` fixture to `tests/conftest.py`
