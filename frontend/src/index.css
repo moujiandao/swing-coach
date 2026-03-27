@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+:root {
+  --tennis-green: #2D8653;
+  --tennis-green-dark: #236b42;
+}

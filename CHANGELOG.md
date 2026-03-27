@@ -2,6 +2,15 @@
 
 ## [2026-03-27]
 
+### Added (Task 2.1 — Frontend scaffolding)
+- Create `frontend/` React app (Vite + React 19) with Tailwind CSS v4 CSS-based config and `@tailwindcss/vite` plugin
+- Set up react-router-dom v7 with three routes: `/` (Upload), `/analysis/:id` (Analysis), `/history` (History)
+- Add `src/lib/api.js`: Axios instance with `VITE_API_URL` base; exports `createAnalysis`, `confirmUpload`, `getAnalysis`, `getHistory`
+- Create placeholder pages (Upload, Analysis, History) and `NavBar` layout wrapper with dark theme and `#2D8653` tennis green accent
+- Add `.env` with `VITE_API_URL=http://localhost:8000`
+
+
+
 ### Added (Task 1.9 — Worker task orchestration and end-to-end pipeline)
 - Implement `app/worker/tasks.py`: `process_analysis()` orchestrating all 5 pipeline stages (frames → pose → features → DTW → feedback) with per-stage timing logs, try/finally cleanup, and status transitions to `completed`/`failed`
 - Add `app/services/s3.py` `download_video()`: downloads video from S3 to local path; falls back to local `uploads/` copy in dev
