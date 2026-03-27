@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwingCoach Pipeline Diagram</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  header {
+    text-align: center;
+    padding: 32px 20px 16px;
+  }
+  header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+  header p {
+    color: #94a3b8;
+    font-size: 14px;
+  }
+
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    padding: 12px 20px 24px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 0 20px 60px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* ---- Stage cards ---- */
+  .stage {
+    width: 100%;
+    max-width: 700px;
+    border-radius: 12px;
+    border: 1px solid #1e293b;
+    background: #171b26;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    position: relative;
+  }
+  .stage:hover {
+    border-color: #334155;
+    box-shadow: 0 0 24px rgba(99, 102, 241, 0.08);
+    transform: translateY(-2px);
+  }
+  .stage.active {
+    border-color: #6366f1;
+    box-shadow: 0 0 32px rgba(99, 102, 241, 0.15);
+  }
+
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 22px;
+  }
+  .stage-number {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .stage-title-group { flex: 1; }
+  .stage-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f1f5f9;
+  }
+  .stage-subtitle {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+  .stage-tool {
+    font-size: 11px;
+    color: #64748b;
+    background: #1e293b;
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .stage-chevron {
+    width: 20px;
+    height: 20px;
+    color: #475569;
+    transition: transform 0.25s;
+    flex-shrink: 0;
+  }
+  .stage.active .stage-chevron { transform: rotate(180deg); }
+
+  .stage-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+    padding: 0 22px;
+  }
+  .stage.active .stage-body {
+    max-height: 800px;
+    padding: 0 22px 20px;
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  @media (max-width: 600px) {
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+
+  .detail-card {
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .detail-card.full { grid-column: 1 / -1; }
+  .detail-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+  .detail-value {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px;
+    color: #c4b5fd;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .detail-value .comment {
+    color: #475569;
+  }
+  .detail-value .type {
+    color: #67e8f9;
+  }
+  .detail-value .key {
+    color: #fbbf24;
+  }
+
+  /* ---- Arrow connectors ---- */
+  .arrow-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    width: 100%;
+    max-width: 700px;
+    min-height: 70px;
+  }
+  .arrow-line {
+    width: 2px;
+    flex: 1;
+    min-height: 16px;
+    background: linear-gradient(to bottom, #334155, #4f46e5, #334155);
+  }
+  .arrow-label {
+    background: #1e1b4b;
+    border: 1px solid #312e81;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 11px;
+    color: #a5b4fc;
+    text-align: center;
+    line-height: 1.5;
+    max-width: 85%;
+  }
+  .arrow-head {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #4f46e5;
+  }
+
+  /* ---- DB write at bottom ---- */
+  .db-card {
+    width: 100%;
+    max-width: 700px;
+    border-radius: 12px;
+    border: 1px solid #064e3b;
+    background: #0d2818;
+    padding: 20px 22px;
+    text-align: center;
+  }
+  .db-card h3 {
+    color: #34d399;
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+  .db-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+  .db-field {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 11px;
+    background: #064e3b;
+    color: #6ee7b7;
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+
+  /* ---- Color themes per stage ---- */
+  .stage-0 .stage-number { background: #1e3a5f; color: #38bdf8; }
+  .stage-1 .stage-number { background: #1e3a5f; color: #38bdf8; }
+  .stage-2 .stage-number { background: #312e81; color: #a5b4fc; }
+  .stage-3 .stage-number { background: #312e81; color: #a5b4fc; }
+  .stage-4 .stage-number { background: #4a1d6a; color: #c084fc; }
+  .stage-5 .stage-number { background: #4a1d6a; color: #c084fc; }
+
+  .stage-0.active { border-color: #38bdf8; }
+  .stage-1.active { border-color: #38bdf8; }
+  .stage-2.active { border-color: #818cf8; }
+  .stage-3.active { border-color: #818cf8; }
+  .stage-4.active { border-color: #c084fc; }
+  .stage-5.active { border-color: #c084fc; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SwingCoach Analysis Pipeline</h1>
+  <p>Click any stage to expand. Data shapes shown on connecting arrows.</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#38bdf8"></div> Extraction</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#818cf8"></div> Analysis</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c084fc"></div> Intelligence</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div> Storage</div>
+</div>
+
+<div class="pipeline">
+
+  <!-- ================================================================ -->
+  <!--  STAGE 0: Video Input                                            -->
+  <!-- ================================================================ -->
+  <div class="stage stage-0" onclick="toggle(this)">
+    <div class="stage-header">
+      <div class="stage-number">0</div>
+      <div class="stage-title-group">
+        <div class="stage-title">Video Upload + Download</div>
+        <div class="stage-subtitle">S3 presigned URL, local dev fallback</div>
+      </div>
+      <div class="stage-tool">S3 / Local FS</div>
+      <svg class="stage-chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg>
+    </div>
+    <div class="stage-body">
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-label">Input</div>
+          <div class="detail-value"><span class="type">POST</span> /api/upload
+<span class="key">stroke_type</span>: StrokeType enum
+<span class="key">pro_reference</span>: str <span class="comment"># default "federer"</span></div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-label">Constraints</div>
+          <div class="detail-value"><span class="key">format</span>: MP4 / MOV
+<span class="key">max_duration</span>: 30 seconds
+<span class="key">ideal_fps</span>: 120fps slow-mo
+<span class="key">max_size</span>: configurable (env)</div>
+        </div>
+        <div class="detail-card full">
+          <div class="detail-label">Pipeline Trigger</div>
+          <div class="detail-value"><span class="type">POST</span> /api/{id}/confirm  -->  enqueue <span class="key">process_analysis(analysis_id)</span> to RQ</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow 0 -> 1 -->
+  <div class="arrow-connector">
+    <div class="arrow-line"></div>
+    <div class="arrow-label"><span class="key">video_path</span>: <span class="type">str</span>  <span class="comment">(path to downloaded .mp4)</span></div>
+    <div class="arrow-line"></div>
+    <div class="arrow-head"></div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  STAGE 1: Frame Extraction                                       -->
+  <!-- ================================================================ -->
+  <div class="stage stage-1" onclick="toggle(this)">
+    <div class="stage-header">
+      <div class="stage-number">1</div>
+      <div class="stage-title-group">
+        <div class="stage-title">Frame Extraction</div>
+        <div class="stage-subtitle">frame_extractor.py - 184 lines</div>
+      </div>
+      <div class="stage-tool">FFmpeg</div>
+      <svg class="stage-chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg>
+    </div>
+    <div class="stage-body">
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-label">Function</div>
+          <div class="detail-value"><span class="key">extract_frames</span>(
+  video_path: <span class="type">str</span>,
+  output_dir: <span class="type">str</span>,
+  target_fps: <span class="type">int | None</span>
+) -> <span class="type">FrameExtractionResult</span></div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-label">Key Logic</div>
+          <div class="detail-value">1. ffprobe: detect fps, duration, resolution
+2. Duration guard (max 30s)
+3. Auto-downsample >60fps to 30fps
+4. ffmpeg -vf fps={target} -> PNGs</div>
+        </div>
+        <div class="detail-card full">
+          <div class="detail-label">Output: FrameExtractionResult</div>
+          <div class="detail-value"><span class="key">frame_paths</span>:      <span class="type">list[str]</span>           <span class="comment"># sorted PNG paths</span>
+<span class="key">fps</span>:              <span class="type">float</span>                <span class="comment"># output fps (e.g. 30.0)</span>
+<span class="key">duration_seconds</span>: <span class="type">float</span>                <span class="comment"># video duration</span>
+<span class="key">total_frames</span>:     <span class="type">int</span>                  <span class="comment"># number of PNGs extracted</span>
+<span class="key">resolution</span>:       <span class="type">tuple[int, int]</span>      <span class="comment"># (width, height)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow 1 -> 2 -->
+  <div class="arrow-connector">
+    <div class="arrow-line"></div>
+    <div class="arrow-label"><span class="key">frame_paths</span>: <span class="type">list[str]</span>  <span class="comment">(N sorted PNG paths)</span>
+<span class="key">fps</span>: <span class="type">float</span></div>
+    <div class="arrow-line"></div>
+    <div class="arrow-head"></div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  STAGE 2: Pose Estimation                                        -->
+  <!-- ================================================================ -->
+  <div class="stage stage-2" onclick="toggle(this)">
+    <div class="stage-header">
+      <div class="stage-number">2</div>
+      <div class="stage-title-group">
+        <div class="stage-title">Pose Estimation</div>
+        <div class="stage-subtitle">pose_estimator.py - 252 lines</div>
+      </div>
+      <div class="stage-tool">MediaPipe BlazePose</div>
+      <svg class="stage-chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg>
+    </div>
+    <div class="stage-body">
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-label">Function</div>
+          <div class="detail-value"><span class="key">extract_poses</span>(
+  frame_paths: <span class="type">list[str]</span>
+) -> <span class="type">PoseEstimationResult</span>
+
+Model: pose_landmarker_heavy.task (~29MB)
+Running mode: IMAGE (per-frame)</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-label">Key Logic</div>
+          <div class="detail-value">1. Auto-download model on first run
+2. Detect 33 BlazePose landmarks per frame
+3. Interpolate missing frames (linear)
+4. Fail if detection_rate < 50%
+
+Key landmarks: shoulders, elbows,
+wrists, hips, knees, ankles</div>
+        </div>
+        <div class="detail-card full">
+          <div class="detail-label">Output: PoseEstimationResult</div>
+          <div class="detail-value"><span class="key">landmarks</span>:        <span class="type">np.ndarray</span>  shape <span class="type">(N, 33, 3)</span>   <span class="comment"># normalized x, y, z per frame</span>
+<span class="key">visibility</span>:       <span class="type">np.ndarray</span>  shape <span class="type">(N, 33)</span>      <span class="comment"># per-landmark confidence [0,1]</span>
+<span class="key">frames_processed</span>: <span class="type">int</span>                          <span class="comment"># total frames fed in</span>
+<span class="key">frames_with_pose</span>: <span class="type">int</span>                          <span class="comment"># frames where a person was detected</span>
+<span class="key">detection_rate</span>:   <span class="type">float</span>                        <span class="comment"># frames_with_pose / frames_processed</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow 2 -> 3 -->
+  <div class="arrow-connector">
+    <div class="arrow-line"></div>
+    <div class="arrow-label"><span class="key">landmarks</span>: <span class="type">np.ndarray (N, 33, 3)</span>
+<span class="key">fps</span>: <span class="type">float</span>,  <span class="key">stroke_type</span>: <span class="type">str</span>,  <span class="key">handedness</span>: <span class="type">str</span></div>
+    <div class="arrow-line"></div>
+    <div class="arrow-head"></div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  STAGE 3: Feature Extraction                                     -->
+  <!-- ================================================================ -->
+  <div class="stage stage-3" onclick="toggle(this)">
+    <div class="stage-header">
+      <div class="stage-number">3</div>
+      <div class="stage-title-group">
+        <div class="stage-title">Feature Extraction + Phase Segmentation</div>
+        <div class="stage-subtitle">feature_engine.py - 274 lines</div>
+      </div>
+      <div class="stage-tool">NumPy / SciPy</div>
+      <svg class="stage-chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg>
+    </div>
+    <div class="stage-body">
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-label">Function</div>
+          <div class="detail-value"><span class="key">extract_features</span>(
+  landmarks: <span class="type">np.ndarray (N, 33, 3)</span>,
+  fps: <span class="type">float</span>,
+  stroke_type: <span class="type">str</span>,
+  handedness: <span class="type">str</span> = "right"
+) -> <span class="type">FeatureExtractionResult</span></div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-label">Key Logic</div>
+          <div class="detail-value">1. Resolve hitting arm by handedness
+2. Compute 6 joint angles per frame
+3. Savitzky-Golay smoothed velocities
+4. Phase detection via wrist x-velocity
+   sign changes + peak wrist speed
+5. Contact frame = argmax(wrist_speed)</div>
+        </div>
+        <div class="detail-card full">
+          <div class="detail-label">Output: FeatureExtractionResult</div>
+          <div class="detail-value"><span class="key">joint_angles</span>: <span class="type">dict[str, np.ndarray]</span>  <span class="comment"># degrees, shape (N,) each</span>
+  keys: <span class="key">elbow_angle</span>, <span class="key">shoulder_rotation</span>, <span class="key">hip_rotation</span>,
+        <span class="key">trunk_rotation</span>, <span class="key">knee_bend</span>, <span class="key">racket_arm_elevation</span>
+
+<span class="key">velocities</span>: <span class="type">dict[str, np.ndarray]</span>     <span class="comment"># smoothed speed, shape (N,) each</span>
+  keys: <span class="key">wrist_speed</span>, <span class="key">elbow_speed</span>, <span class="key">hip_speed</span>
+
+<span class="key">phases</span>: <span class="type">dict[str, tuple[int, int]]</span>  <span class="comment"># (start_frame, end_frame) inclusive</span>
+  keys: <span class="key">preparation</span>, <span class="key">backswing</span>, <span class="key">forward_swing</span>, <span class="key">contact</span>, <span class="key">follow_through</span>
+
+<span class="key">contact_frame</span>: <span class="type">int</span>                  <span class="comment"># frame index of peak wrist speed</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow 3 -> 4 -->
+  <div class="arrow-connector">
+    <div class="arrow-line"></div>
+    <div class="arrow-label"><span class="key">user_features</span>: <span class="type">FeatureExtractionResult</span>
+<span class="key">pro_reference</span>: <span class="type">dict</span> <span class="comment">(from ProReferenceDB, keys: joint_angles, phases)</span>
+<span class="key">fps</span>: <span class="type">float</span></div>
+    <div class="arrow-line"></div>
+    <div class="arrow-head"></div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  STAGE 4: DTW Comparison                                         -->
+  <!-- ================================================================ -->
+  <div class="stage stage-4" onclick="toggle(this)">
+    <div class="stage-header">
+      <div class="stage-number">4</div>
+      <div class="stage-title-group">
+        <div class="stage-title">DTW Comparison</div>
+        <div class="stage-subtitle">dtw_comparator.py - 241 lines</div>
+      </div>
+      <div class="stage-tool">tslearn</div>
+      <svg class="stage-chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg>
+    </div>
+    <div class="stage-body">
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-label">Function</div>
+          <div class="detail-value"><span class="key">compare_swing</span>(
+  user_features: <span class="type">FeatureExtractionResult</span>,
+  pro_reference: <span class="type">dict</span>,
+  fps: <span class="type">float</span> = 30.0
+) -> <span class="type">ComparisonResult</span></div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-label">Key Logic</div>
+          <div class="detail-value">1. Resample segments to equal length
+2. Per-joint, per-phase DTW distance
+3. Score = 100 * exp(-dist / 50)
+4. Weighted overall: forward_swing 35%,
+   contact 30%, backswing 15%,
+   follow_through 15%, preparation 5%
+5. Classify severity: <40 critical,
+   <60 moderate, <70 minor</div>
+        </div>
+        <div class="detail-card full">
+          <div class="detail-label">Output: ComparisonResult</div>
+          <div class="detail-value"><span class="key">overall_score</span>: <span class="type">float</span>                <span class="comment"># 0-100 (higher = more like pro)</span>
+
+<span class="key">phase_scores</span>: <span class="type">dict[str, float]</span>      <span class="comment"># per-phase 0-100</span>
+  keys: preparation, backswing, forward_swing, contact, follow_through
+
+<span class="key">deviations</span>: <span class="type">list[Deviation]</span>         <span class="comment"># sorted worst-first</span>
+  Deviation:
+    <span class="key">joint</span>: <span class="type">str</span>                    <span class="comment"># e.g. "elbow_angle"</span>
+    <span class="key">phase</span>: <span class="type">str</span>                    <span class="comment"># e.g. "forward_swing"</span>
+    <span class="key">mean_diff_degrees</span>: <span class="type">float</span>     <span class="comment"># signed difference</span>
+    <span class="key">max_diff_degrees</span>: <span class="type">float</span>      <span class="comment"># absolute max difference</span>
+    <span class="key">timing_offset_ms</span>: <span class="type">float</span>      <span class="comment"># +ahead / -behind pro</span>
+    <span class="key">severity</span>: <span class="type">str</span>                <span class="comment"># "critical" | "moderate" | "minor"</span>
+    <span class="key">description</span>: <span class="type">str</span>             <span class="comment"># human-readable</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow 4 -> 5 -->
+  <div class="arrow-connector">
+    <div class="arrow-line"></div>
+    <div class="arrow-label"><span class="key">comparison</span>: <span class="type">ComparisonResult</span>
+<span class="key">stroke_type</span>: <span class="type">str</span>,  <span class="key">pro_reference_name</span>: <span class="type">str</span></div>
+    <div class="arrow-line"></div>
+    <div class="arrow-head"></div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  STAGE 5: Claude Feedback                                        -->
+  <!-- ================================================================ -->
+  <div class="stage stage-5" onclick="toggle(this)">
+    <div class="stage-header">
+      <div class="stage-number">5</div>
+      <div class="stage-title-group">
+        <div class="stage-title">Coaching Feedback Generation</div>
+        <div class="stage-subtitle">feedback_generator.py - 246 lines</div>
+      </div>
+      <div class="stage-tool">Claude API</div>
+      <svg class="stage-chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg>
+    </div>
+    <div class="stage-body">
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-label">Function</div>
+          <div class="detail-value"><span class="key">generate_coaching_feedback</span>(
+  comparison: <span class="type">ComparisonResult</span>,
+  stroke_type: <span class="type">str</span>,
+  pro_reference_name: <span class="type">str</span>
+) -> <span class="type">CoachingFeedback</span>
+
+Model: claude-sonnet-4-20250514
+Temperature: 0.3, Max tokens: 2000
+Retry on invalid JSON (1 attempt)</div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-label">Prompt Strategy</div>
+          <div class="detail-value">System: expert tennis coach persona
+  - References specific stroke type + pro
+  - Enforces JSON-only response
+
+User message: structured text with
+  - Overall score
+  - Phase scores table
+  - All deviations with severity,
+    angle diffs, timing offsets</div>
+        </div>
+        <div class="detail-card full">
+          <div class="detail-label">Output: CoachingFeedback</div>
+          <div class="detail-value"><span class="key">summary</span>: <span class="type">str</span>                       <span class="comment"># 2-3 sentence overview</span>
+<span class="key">overall_assessment</span>: <span class="type">str</span>            <span class="comment"># "beginner" | "intermediate" | "advanced" | "pro-level"</span>
+
+<span class="key">priority_fixes</span>: <span class="type">list[Fix]</span>             <span class="comment"># top 3, ordered by impact</span>
+  Fix:
+    <span class="key">title</span>: <span class="type">str</span>                      <span class="comment"># e.g. "Late hip rotation"</span>
+    <span class="key">explanation</span>: <span class="type">str</span>                <span class="comment"># what's wrong and why it matters</span>
+    <span class="key">target_metric</span>: <span class="type">str</span>              <span class="comment"># e.g. "hip_rotation during forward_swing"</span>
+    <span class="key">current_value</span>: <span class="type">str</span>              <span class="comment"># student's measurement</span>
+    <span class="key">target_value</span>: <span class="type">str</span>               <span class="comment"># pro reference measurement</span>
+
+<span class="key">positive_notes</span>: <span class="type">list[str]</span>           <span class="comment"># 2-3 things going well</span>
+
+<span class="key">drill_plan</span>: <span class="type">list[Drill]</span>              <span class="comment"># progressive drills for each fix</span>
+  Drill:
+    <span class="key">name</span>: <span class="type">str</span>                       <span class="comment"># drill name</span>
+    <span class="key">description</span>: <span class="type">str</span>                <span class="comment"># step-by-step instructions</span>
+    <span class="key">duration</span>: <span class="type">str</span>                   <span class="comment"># e.g. "10 minutes"</span>
+    <span class="key">frequency</span>: <span class="type">str</span>                  <span class="comment"># e.g. "Before each practice"</span>
+    <span class="key">focus_area</span>: <span class="type">str</span>                 <span class="comment"># matches a Fix title</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow 5 -> DB -->
+  <div class="arrow-connector">
+    <div class="arrow-line"></div>
+    <div class="arrow-label">All results serialized to JSON and written to Analysis record</div>
+    <div class="arrow-line"></div>
+    <div class="arrow-head"></div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  DB Write                                                        -->
+  <!-- ================================================================ -->
+  <div class="db-card">
+    <h3>PostgreSQL (Supabase) - Analysis Record</h3>
+    <div class="db-fields">
+      <div class="db-field">status: "completed"</div>
+      <div class="db-field">pose_data: JSON</div>
+      <div class="db-field">phase_scores: JSON</div>
+      <div class="db-field">deviations: JSON</div>
+      <div class="db-field">coaching_feedback: JSON</div>
+      <div class="db-field">overall_score: float</div>
+      <div class="db-field">processing_time_ms: int</div>
+      <div class="db-field">completed_at: datetime</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggle(el) {
+  const wasActive = el.classList.contains('active');
+  // Close all stages
+  document.querySelectorAll('.stage').forEach(s => s.classList.remove('active'));
+  // Toggle clicked stage
+  if (!wasActive) el.classList.add('active');
+}
+
+// Open stage 1 by default so the page isn't all collapsed
+document.querySelector('.stage-1').classList.add('active');
+</script>
+
+</body>
+</html>

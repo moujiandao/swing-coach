@@ -2,6 +2,9 @@
 
 ## [2026-03-27]
 
+### Added
+- Add interactive HTML pipeline diagram (`docs/pipeline-diagram.html`): expandable stage cards showing function signatures, internal logic, and output dataclasses with exact field types and shapes; typed arrow connectors between stages; color-coded by concern (extraction, analysis, intelligence, storage)
+
 ### Fixed (verify.py and dependency setup — post-sprint audit)
 - Fix `backend/pyproject.toml`: move pytest/pytest-asyncio/aiosqlite from `[project.optional-dependencies]` to `[dependency-groups]` so `uv sync` installs them by default
 - Create `backend/.gitignore`: Python, venv, .env, test cache, *.npy, local uploads dir
