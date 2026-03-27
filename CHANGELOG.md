@@ -2,6 +2,15 @@
 
 ## [2026-03-27]
 
+### Added (Task 2.3 — Analysis results page)
+- Create `src/hooks/useAnalysis.js`: polls `GET /api/analysis/{id}` every 2s, stops on `completed`/`failed`, returns `{ analysis, isLoading, error, isProcessing }`
+- Create `src/components/ProcessingState.jsx`: spinner with staggered stage-hint dots
+- Create `src/components/ScoreGauge.jsx`: SVG circular ring, 4-tier color thresholds (green/yellow/orange/red)
+- Create `src/components/PhaseBreakdown.jsx`: 5-phase horizontal bar chart with color-coded scores
+- Create `src/components/DeviationCard.jsx`: joint/phase/severity-badge/angle-diff cards; severity derived from angle_diff magnitude
+- Create `src/components/CoachingFeedback.jsx`: accordion priority fixes, drill plan grid, green positive-notes callouts
+- Build `src/pages/Analysis.jsx`: three states (processing/failed/completed), responsive 2-col score+phases layout
+
 ### Added (Task 2.2 — Video upload page)
 - Create `src/components/VideoUploader.jsx`: react-dropzone with MP4/MOV/QuickTime accept, 100 MB max, file name+size display, `<video>` preview via `URL.createObjectURL`, upload progress bar
 - Build full `src/pages/Upload.jsx`: 7-option stroke type card selector, pro reference dropdown (Federer/Nadal/Djokovic/Synthetic), `createAnalysis` → S3 PUT → `confirmUpload` → navigate flow with `onUploadProgress` tracking, `file://` dev fallback to multipart POST, error banner, disabled-until-ready Analyze button
