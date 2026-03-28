@@ -8,25 +8,39 @@ AI-powered tennis swing analysis. Upload a video of your swing, get coaching fee
 
 ```
 Browser (React + Vite)
-    │  drag-drop video upload
-    ▼
+    │  drag-drop video upload          │  pro reference upload (Pro Library)
+    ▼                                  ▼
 FastAPI (Python)
-    ├── POST /api/upload        → presigned S3 URL + analysis record
-    ├── POST /api/upload/{id}/confirm → enqueue RQ job
-    ├── GET  /api/analysis/{id} → poll for results
-    └── GET  /api/history       → past analyses
+    ├── POST /api/upload               → presigned S3 URL + analysis record
+    ├── POST /api/upload/{id}/confirm  → enqueue analysis RQ job
+    ├── GET  /api/analysis/{id}        → poll for results
+    ├── GET  /api/analysis/{id}/overlay → overlay dataset for canvas rendering
+    ├── GET  /api/history              → past analyses
+    ├── POST /api/pro-references       → presigned S3 URL + ProReference record
+    ├── POST /api/pro-references/{id}/confirm → enqueue pro reference RQ job
+    ├── GET  /api/pro-references       → list available pro references
+    └── GET  /api/pro-references/{id}/preview → skeleton preview data
     │
     ▼ (enqueue)
 Redis Queue (RQ) Worker
-    ├── FFmpeg          → extract frames (PNG) from video
-    ├── MediaPipe       → 33 body landmarks per frame → numpy array (N, 33, 3)
-    ├── Feature Engine  → joint angles, velocities, phase segmentation
-    ├── DTW Comparator  → compare against pro reference (.npz)
-    └── Claude API      → structured coaching feedback (JSON)
+    ├── Analysis pipeline (tasks.py):
+    │   ├── FFmpeg          → extract frames (PNG) from video
+    │   ├── MediaPipe       → 33 body landmarks per frame → numpy array (N, 33, 3)
+    │   ├── Feature Engine  → joint angles, velocities, phase segmentation
+    │   ├── DTW Comparator  → compare against pro reference (.npz)
+    │   ├── Phase Aligner   → per-phase frame mapping + aligned pro landmarks
+    │   ├── Deviation Annotator → per-frame joint deviation severity
+    │   └── Claude API      → structured coaching feedback (JSON)
+    │
+    └── Pro Reference pipeline (pro_reference_tasks.py):
+        ├── FFmpeg          → extract frames
+        ├── MediaPipe       → landmarks
+        ├── Feature Engine  → angles, velocities, phases
+        └── np.savez        → .npz file (landmarks + features)
     │
     ▼ (store)
-PostgreSQL (Supabase) ← analysis records + results
-AWS S3               ← original video storage
+PostgreSQL (Supabase) ← analysis records + overlay data + pro reference metadata
+AWS S3               ← original videos, keyframe JPEGs, pro reference thumbnails
 ```
 
 ---
@@ -117,9 +131,16 @@ For local dev without S3: leave `S3_BUCKET` empty and the backend will save uplo
 
 ---
 
-## Building Pro References
+## Pro Reference Library
 
-Pro references are pre-computed swing feature data stored as `.npz` files in `backend/app/pro_references/data/`.
+Pro references are pre-computed swing feature data stored as `.npz` files, now backed by a `ProReference` database table with upload status tracking.
+
+### Upload a pro reference via the UI
+
+1. Navigate to the **Pro Library** page in the app
+2. Click **Add Pro Reference**, fill in player name and stroke type
+3. Upload the video file — the backend processes it automatically (frames → pose → features → .npz)
+4. Once status shows **Ready**, the reference is available to select when uploading a new analysis
 
 ### Generate a synthetic reference (for dev/testing)
 
@@ -129,7 +150,7 @@ uv run python ../scripts/generate_synthetic_reference.py
 # Creates: app/pro_references/data/synthetic_forehand.npz
 ```
 
-### Process a real pro video
+### Process a real pro video via CLI (legacy)
 
 ```bash
 cd backend
@@ -141,6 +162,31 @@ uv run python ../scripts/build_pro_references.py \
 ```
 
 Supported stroke values: `forehand`, `backhand_one`, `backhand_two`, `serve_flat`, `serve_kick`, `serve_slice`, `volley`
+
+---
+
+## Comparison View and Deviation Overlay
+
+After an analysis completes, the **Comparison View** shows your swing overlaid on the selected pro reference using an animated skeleton canvas.
+
+### How it works
+
+- The backend phase-aligns both swings frame-by-frame (each of 5 phases is independently resampled)
+- The frontend fetches `GET /api/analysis/{id}/overlay` which returns landmark arrays, frame mapping, and per-frame deviation annotations
+- `DualSkeletonCanvas` renders both skeletons simultaneously — user in cyan, pro in gold
+- Deviating joints pulse in red/amber based on severity (critical/moderate/minor)
+- `VideoScrubber` lets you step through frames; `PhaseTimeline` shows which swing phase you're in
+- `DeviationTimeline` shows a severity heatmap across the full swing
+
+### Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| Space | Play / pause |
+| ← / → | Step one frame |
+| [ / ] | Jump to previous / next phase |
+| S | Toggle skeleton overlay |
+| ? | Show keyboard shortcuts |
 
 ---
 

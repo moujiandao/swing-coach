@@ -1,21 +1,40 @@
 # Changelog
 
-## Session status — 2026-03-28 end of session
+## Session status — 2026-03-28 end of session (V2 complete)
 
-**Branch:** `feature/pro-reference-v2` — 250 tests passing, working tree clean
+**Branch:** `feature/pro-reference-v2` — 256 tests passing (250 + 6 skipped), working tree clean
 
-**Completed this session:**
-- Task 3.4: ProReferencePicker component + wire Upload page to DB-backed references + `pro_reference_id` FK on Analysis
-- Task 4.1: Phase alignment engine (`phase_aligner.py`) + deviation annotator (`deviation_annotator.py`) + 4 new overlay JSON columns on Analysis
-- Task 4.2: `GET /api/analysis/{id}/overlay` + `GET /api/pro-references/{id}/preview` endpoints + `LANDMARK_CONNECTIONS` constant + `fps` column on Analysis
-- Task 4.3: Keyframe extraction per phase + S3 upload + `keyframe_s3_keys` on Analysis + presigned `video_url`/`keyframe_urls` in analysis and overlay endpoints + local dev static file serving via `/uploads/`
-- Task 5.1: `DualSkeletonCanvas` component (video + dual skeleton + deviation glow + phase label) + `SkeletonLegend` + `src/lib/landmarks.js` utilities + `/dev/overlay-test` page with synthetic data
-- Task 5.2: `useVideoPlayback` hook (rAF-based, configurable speed) + `VideoScrubber` (phase-gradient track, transport controls, phase jump buttons) + `PhaseTimeline` (proportional segments, tempo badges, cursor line)
-- Task 5.3: `ComparisonView` (overlay/side-by-side modes, ResizeObserver canvas sizing, mobile fallback) + `DeviationTimeline` (colored dots by severity, hover tooltips, click-to-seek) + `FrameDeviationPanel` (collapsible, live per-frame joint data) + `useOverlayData` hook + integrated into `Analysis.jsx` with loading/error/degradation states
-- Task 5.4: Keyboard shortcuts (Space/arrows/1-5/S/P/D/M/[/]/) + `KeyboardShortcutsHelp` overlay + `DualSkeletonCanvas` polish (frame counter, phase-colored border ring, skeleton fade animation, aggressive critical deviation pulse) + breadcrumbs + page title on Analysis page
+**V2 feature set complete (Tasks 3.1 - 6.1):**
 
-**Next tasks (FEATURE_SPEC_V2.md):**
-- Task 6.1: End-to-end integration test and CLAUDE.md update
+### Pro Reference Library (Tasks 3.1-3.4)
+- DB-backed `ProReference` model with Alembic migration, player slug, status tracking
+- 7 REST endpoints: create, confirm, list, detail, preview, delete, reprocess
+- RQ pipeline: `process_pro_reference` (FFmpeg → MediaPipe → features → .npz → thumbnail)
+- Frontend: `ProLibrary.jsx` page, `AddProReferenceModal`, `ProReferenceCard`, `ProReferencePicker`
+- Upload page wired to DB-backed pro reference picker with `pro_reference_id` FK on Analysis
+
+### Deviation Overlay Backend (Tasks 4.1-4.3)
+- `phase_aligner.py`: per-phase linear interpolation frame mapping (user ↔ pro)
+- `deviation_annotator.py`: per-frame joint angle deviation annotation (severity, direction)
+- `GET /api/analysis/{id}/overlay` endpoint returning full overlay dataset
+- `GET /api/pro-references/{id}/preview` endpoint for Pro Library skeleton preview
+- Phase-aligned landmark resampling + 4 new JSON columns on Analysis (overlay, frame_mapping, etc.)
+- Keyframe extraction at phase boundaries → S3 upload → presigned URLs in API response
+
+### Frontend Comparison UI (Tasks 5.1-5.4)
+- `DualSkeletonCanvas`: dual-skeleton canvas with deviation glow, phase border, frame counter
+- `VideoScrubber`: frame-accurate scrubber with phase-gradient track and transport controls
+- `PhaseTimeline`: proportional phase segments with tempo ratio badges
+- `ComparisonView`: overlay/side-by-side modes, ResizeObserver sizing, mobile fallback
+- `DeviationTimeline`: frame severity heatmap with hover tooltips and click-to-seek
+- `FrameDeviationPanel`: collapsible per-frame joint deviation detail
+- `useVideoPlayback`, `useOverlayData` hooks; `src/lib/landmarks.js` utilities
+- Keyboard shortcuts (Space/arrows/phase jumps/toggles) + `KeyboardShortcutsHelp` overlay
+
+### Integration (Task 6.1)
+- `scripts/test_e2e_v2.py`: full in-process e2e test covering both pipelines and overlay data integrity
+- `CLAUDE.md` updated: new project structure, pipeline diagrams, Non-Obvious Decisions, Do Not, Common Commands
+- `README.md` updated: Pro Library section, Comparison View section, updated architecture diagram
 
 ---
 
