@@ -5,9 +5,10 @@ Usage (from backend/):
     uv run python run_worker.py
 """
 import logging
+import platform
 
 from redis import Redis
-from rq import Queue, Worker
+from rq import Queue, SimpleWorker, Worker
 
 from app.config import get_settings
 
@@ -16,10 +17,13 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
+# macOS: use SimpleWorker (no fork) to avoid Obj-C runtime crash in forked processes
+WorkerClass = SimpleWorker if platform.system() == "Darwin" else Worker
+
 settings = get_settings()
 redis = Redis.from_url(settings.redis_url)
 queue = Queue(connection=redis)
-worker = Worker([queue], connection=redis)
+worker = WorkerClass([queue], connection=redis)
 
 if __name__ == "__main__":
     logging.getLogger(__name__).info(
