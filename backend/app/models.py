@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, Integer, JSON, String, Text, Uuid
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, JSON, String, Text, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from pydantic import BaseModel, ConfigDict, field_serializer
 
@@ -76,6 +76,12 @@ class Analysis(Base):
     )
     video_s3_key: Mapped[str] = mapped_column(String(512), nullable=False)
     pro_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    # New: FK to ProReference; nullable so old analyses without it still load
+    pro_reference_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("pro_references.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Pipeline output fields — all nullable until processing completes
     pose_data: Mapped[Any | None] = mapped_column(JSON, nullable=True)
@@ -84,6 +90,8 @@ class Analysis(Base):
     coaching_feedback: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     overall_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Resampled pro landmarks stored for client-side skeleton overlay
+    pro_landmarks: Mapped[Any | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -134,7 +142,8 @@ class ProReference(Base):
 
 class AnalysisCreate(BaseModel):
     stroke_type: StrokeType
-    pro_reference: str = "federer"
+    pro_reference: str = "federer"          # legacy string name — kept for backward compat
+    pro_reference_id: uuid.UUID | None = None  # preferred: FK to ProReference table
 
 
 class UploadInitResponse(BaseModel):
@@ -157,12 +166,14 @@ class AnalysisResponse(BaseModel):
     stroke_type: StrokeType
     video_s3_key: str
     pro_reference: str
+    pro_reference_id: uuid.UUID | None
     pose_data: Any | None
     phase_scores: dict | None
     deviations: list | None
     coaching_feedback: dict | None
     overall_score: float | None
     error_message: str | None
+    pro_landmarks: Any | None
     created_at: datetime
     completed_at: datetime | None
     processing_time_ms: int | None
@@ -170,6 +181,10 @@ class AnalysisResponse(BaseModel):
     @field_serializer("id")
     def serialize_id(self, v: uuid.UUID) -> str:
         return str(v)
+
+    @field_serializer("pro_reference_id")
+    def serialize_pro_reference_id(self, v: uuid.UUID | None) -> str | None:
+        return str(v) if v is not None else None
 
 
 class ProReferenceCreate(BaseModel):

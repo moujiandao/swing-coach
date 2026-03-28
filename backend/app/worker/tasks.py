@@ -24,7 +24,7 @@ import numpy as np
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.models import Analysis, AnalysisStatus
+from app.models import Analysis, AnalysisStatus, ProReference
 from app.pro_references.loader import ProReferenceDB
 from app.services.db import get_session
 from app.services.s3 import download_video
@@ -51,6 +51,14 @@ def _get_pro_db() -> ProReferenceDB:
 # ---------------------------------------------------------------------------
 # Internal async helpers
 # ---------------------------------------------------------------------------
+
+async def _fetch_pro_reference(pro_reference_id: _uuid.UUID) -> ProReference | None:
+    async with get_session() as session:
+        result = await session.execute(
+            select(ProReference).where(ProReference.id == pro_reference_id)
+        )
+        return result.scalar_one_or_none()
+
 
 async def _fetch_analysis(analysis_id: str) -> Analysis:
     async with get_session() as session:
@@ -81,6 +89,7 @@ async def _write_results(
     coaching_feedback: dict,
     overall_score: float,
     processing_time_ms: int,
+    pro_landmarks: list | None = None,
 ) -> None:
     async with get_session() as session:
         result = await session.execute(
@@ -93,6 +102,7 @@ async def _write_results(
         analysis.deviations = deviations
         analysis.coaching_feedback = coaching_feedback
         analysis.overall_score = overall_score
+        analysis.pro_landmarks = pro_landmarks
         analysis.completed_at = datetime.now(timezone.utc)
         analysis.processing_time_ms = processing_time_ms
 
@@ -132,6 +142,7 @@ def process_analysis(analysis_id: str) -> None:
         analysis = asyncio.run(_fetch_analysis(analysis_id))
         stroke_type = analysis.stroke_type.value
         pro_reference_name = analysis.pro_reference
+        pro_reference_db_id = analysis.pro_reference_id
         s3_key = analysis.video_s3_key
 
         # 2. Create temp working directory
@@ -177,21 +188,66 @@ def process_analysis(analysis_id: str) -> None:
 
         # 7. Load pro reference
         t0 = time.perf_counter()
-        pro_db = _get_pro_db()
-        pro_ref = pro_db.get_reference(pro_reference_name, stroke_type)
+        pro_landmarks_for_storage: list | None = None
+
+        if pro_reference_db_id is not None:
+            # Preferred path: load .npz directly using the path stored on the DB record
+            db_ref = asyncio.run(_fetch_pro_reference(pro_reference_db_id))
+            if db_ref is not None and db_ref.npz_path and Path(db_ref.npz_path).exists():
+                data = np.load(db_ref.npz_path, allow_pickle=False)
+                # Reconstruct phases dict from stored key/value arrays
+                phase_keys = [str(k) for k in data["_phase_keys"]]
+                phase_values = data["_phase_values"]
+                phases = {k: (int(phase_values[i, 0]), int(phase_values[i, 1]))
+                          for i, k in enumerate(phase_keys)}
+                joint_angles = {
+                    key[len("angle_"):]: data[key]
+                    for key in data.files if key.startswith("angle_")
+                }
+                velocities = {
+                    key[len("velocity_"):]: data[key]
+                    for key in data.files if key.startswith("velocity_")
+                }
+                pro_ref = {
+                    "player": str(data["_player"]),
+                    "stroke_type": str(data["_stroke_type"]),
+                    "joint_angles": joint_angles,
+                    "velocities": velocities,
+                    "phases": phases,
+                    "metadata": {},
+                }
+                # Store the raw landmarks for frontend overlay rendering
+                if "_landmarks" in data.files:
+                    pro_landmarks_for_storage = data["_landmarks"].tolist()
+                logger.info(
+                    "[%s] Pro reference loaded from DB id=%s (%.1fs)",
+                    analysis_id, pro_reference_db_id, time.perf_counter() - t0,
+                )
+            else:
+                logger.warning(
+                    "[%s] DB pro reference %s has no npz_path or file missing, falling back",
+                    analysis_id, pro_reference_db_id,
+                )
+                pro_ref = None
+        else:
+            pro_ref = None
+
         if pro_ref is None:
-            # Fall back to synthetic reference for development
-            logger.warning(
-                "[%s] Pro reference '%s_%s' not found, falling back to synthetic_forehand",
-                analysis_id, pro_reference_name, stroke_type,
-            )
-            pro_ref = pro_db.get_reference("synthetic", "forehand")
-        if pro_ref is None:
-            raise ValueError(
-                f"No pro reference found for '{pro_reference_name}_{stroke_type}' "
-                "and synthetic fallback is also missing. Run generate_synthetic_reference.py first."
-            )
-        logger.info("[%s] Pro reference loaded (%.1fs)", analysis_id, time.perf_counter() - t0)
+            # Legacy / fallback path: load from filesystem by string name
+            pro_db = _get_pro_db()
+            pro_ref = pro_db.get_reference(pro_reference_name, stroke_type)
+            if pro_ref is None:
+                logger.warning(
+                    "[%s] Pro reference '%s_%s' not found, falling back to synthetic_forehand",
+                    analysis_id, pro_reference_name, stroke_type,
+                )
+                pro_ref = pro_db.get_reference("synthetic", "forehand")
+            if pro_ref is None:
+                raise ValueError(
+                    f"No pro reference found for '{pro_reference_name}_{stroke_type}' "
+                    "and synthetic fallback is also missing. Run generate_synthetic_reference.py first."
+                )
+            logger.info("[%s] Pro reference loaded from filesystem (%.1fs)", analysis_id, time.perf_counter() - t0)
 
         # 8. DTW comparison
         t0 = time.perf_counter()
@@ -232,6 +288,7 @@ def process_analysis(analysis_id: str) -> None:
             coaching_feedback=coaching_dict,
             overall_score=comparison.overall_score,
             processing_time_ms=processing_time_ms,
+            pro_landmarks=pro_landmarks_for_storage,
         ))
 
         logger.info(

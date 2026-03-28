@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import VideoUploader from '../components/VideoUploader'
+import ProReferencePicker from '../components/ProReferencePicker'
 import { createAnalysis, confirmUpload } from '../lib/api'
 
 const STROKE_TYPES = [
@@ -14,24 +15,23 @@ const STROKE_TYPES = [
   { value: 'volley', label: 'Volley' },
 ]
 
-const PRO_REFERENCES = [
-  { value: 'federer', label: 'Federer' },
-  { value: 'nadal', label: 'Nadal' },
-  { value: 'djokovic', label: 'Djokovic' },
-  { value: 'synthetic', label: 'Synthetic (test)' },
-]
-
 export default function Upload() {
   const navigate = useNavigate()
 
   const [strokeType, setStrokeType] = useState('')
-  const [proReference, setProReference] = useState('synthetic')
+  const [proReferenceId, setProReferenceId] = useState(null)
   const [file, setFile] = useState(null)
   const [fileError, setFileError] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(null)
   const [error, setError] = useState(null)
 
-  const canSubmit = file && strokeType && uploadProgress == null
+  const canSubmit = file && strokeType && proReferenceId && uploadProgress == null
+
+  function handleStrokeType(value) {
+    setStrokeType(value)
+    // Clear selection — it may not match the new stroke type
+    setProReferenceId(null)
+  }
 
   function handleFile(selected, err) {
     setFileError(err)
@@ -48,7 +48,7 @@ export default function Upload() {
 
     try {
       // Step 1: create the job and get an upload URL
-      const { analysis_id, upload_url } = await createAnalysis(strokeType, proReference)
+      const { analysis_id, upload_url } = await createAnalysis(strokeType, proReferenceId)
 
       // Step 2: upload the video
       if (upload_url.startsWith('file://')) {
@@ -102,7 +102,7 @@ export default function Upload() {
               <button
                 key={value}
                 type="button"
-                onClick={() => setStrokeType(value)}
+                onClick={() => handleStrokeType(value)}
                 className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors text-left
                   ${strokeType === value
                     ? 'border-[#2D8653] bg-[#2D8653]/20 text-white'
@@ -115,22 +115,20 @@ export default function Upload() {
           </div>
         </fieldset>
 
-        {/* Pro reference */}
-        <div>
-          <label htmlFor="pro-ref" className="block text-sm font-medium text-gray-300 mb-2">
-            Compare Against
-          </label>
-          <select
-            id="pro-ref"
-            value={proReference}
-            onChange={(e) => setProReference(e.target.value)}
-            className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-[#2D8653] focus:outline-none"
-          >
-            {PRO_REFERENCES.map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </div>
+        {/* Pro reference picker — only shown after stroke type is selected */}
+        {strokeType && (
+          <div>
+            <p className="text-sm font-medium text-gray-300 mb-3">Compare Against</p>
+            <ProReferencePicker
+              strokeType={strokeType}
+              selectedId={proReferenceId}
+              onSelect={setProReferenceId}
+            />
+            {!proReferenceId && (
+              <p className="mt-2 text-xs text-gray-500">Select a pro reference to continue.</p>
+            )}
+          </div>
+        )}
 
         {/* Video upload */}
         <div>

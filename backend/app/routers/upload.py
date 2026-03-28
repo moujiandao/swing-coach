@@ -12,6 +12,8 @@ from app.models import (
     AnalysisCreate,
     AnalysisStatus,
     ConfirmResponse,
+    ProReference,
+    ProReferenceStatus,
     UploadInitResponse,
 )
 from app.services.db import get_db
@@ -37,18 +39,41 @@ async def initiate_upload(
 
     upload_url = generate_presigned_upload_url(s3_key, content_type="video/mp4")
 
+    # If a pro_reference_id was provided, validate it exists and is ready
+    pro_ref_name = body.pro_reference
+    if body.pro_reference_id is not None:
+        ref_result = await db.execute(
+            select(ProReference).where(ProReference.id == body.pro_reference_id)
+        )
+        pro_ref = ref_result.scalar_one_or_none()
+        if pro_ref is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pro reference not found",
+            )
+        if pro_ref.status != ProReferenceStatus.ready:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Pro reference is not ready (status: {pro_ref.status.value})",
+            )
+        pro_ref_name = pro_ref.player_slug
+
     analysis = Analysis(
         id=analysis_id,
         status=AnalysisStatus.pending,
         stroke_type=body.stroke_type,
-        pro_reference=body.pro_reference,
+        pro_reference=pro_ref_name,
+        pro_reference_id=body.pro_reference_id,
         video_s3_key=s3_key,
         created_at=datetime.now(timezone.utc),
     )
     db.add(analysis)
     await db.flush()  # write to DB within the transaction
 
-    logger.info("Upload initiated — analysis_id=%s stroke=%s", analysis_id, body.stroke_type)
+    logger.info(
+        "Upload initiated — analysis_id=%s stroke=%s pro_reference_id=%s",
+        analysis_id, body.stroke_type, body.pro_reference_id,
+    )
     return UploadInitResponse(
         analysis_id=str(analysis_id),
         upload_url=upload_url,

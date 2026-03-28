@@ -7,10 +7,15 @@ const api = axios.create({
 
 /**
  * Create a new analysis job and get a presigned S3 upload URL.
+ * @param {string} strokeType
+ * @param {string|null} proReferenceId  UUID of a ready ProReference record
  * @returns {{ analysis_id: string, upload_url: string }}
  */
-export async function createAnalysis(strokeType, proReference) {
-  const { data } = await api.post('/api/upload', { stroke_type: strokeType, pro_reference: proReference })
+export async function createAnalysis(strokeType, proReferenceId) {
+  const { data } = await api.post('/api/upload', {
+    stroke_type: strokeType,
+    pro_reference_id: proReferenceId ?? null,
+  })
   return data
 }
 

@@ -17,6 +17,24 @@
 
 ---
 
+## [2026-03-27] Wire Upload page to pro reference library (Task 3.4)
+
+### Added
+- `ProReferencePicker` component — scrollable card row filtered by stroke type; selected card shows green border + checkmark; "Add New" card opens modal
+- `pro_reference_id` UUID FK column on `analyses` table (nullable, backward compat)
+- `pro_landmarks` JSON column on `analyses` table — stores pro landmark array for frontend overlay
+- Alembic migration `c7e3a1b2d849` — adds both new columns; FK constraint skipped on SQLite
+
+### Changed
+- `AnalysisCreate` schema — adds `pro_reference_id: UUID | None`; keeps `pro_reference` string for backward compat
+- `AnalysisResponse` schema — exposes `pro_reference_id` and `pro_landmarks`
+- Upload router — validates `pro_reference_id` exists and has `status=ready` before creating the Analysis record
+- Worker `process_analysis` — loads pro reference directly from the DB record's `.npz` when `pro_reference_id` is set; falls back to file-based loader for old analyses
+- `createAnalysis` in `api.js` — now sends `pro_reference_id` UUID instead of `pro_reference` string name
+- `Upload.jsx` — replaced hardcoded dropdown with `ProReferencePicker`; stroke type selection clears reference selection
+
+---
+
 ## [2026-03-27] Pro reference library UI (Task 3.3)
 
 ### Added
