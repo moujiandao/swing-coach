@@ -92,6 +92,11 @@ class Analysis(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Resampled pro landmarks stored for client-side skeleton overlay
     pro_landmarks: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # Phase alignment overlay data (Task 4.1)
+    aligned_pro_landmarks: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    frame_mapping: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    frame_deviations: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    phase_boundaries: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -174,6 +179,10 @@ class AnalysisResponse(BaseModel):
     overall_score: float | None
     error_message: str | None
     pro_landmarks: Any | None
+    aligned_pro_landmarks: Any | None
+    frame_mapping: list | None
+    frame_deviations: list | None
+    phase_boundaries: dict | None
     created_at: datetime
     completed_at: datetime | None
     processing_time_ms: int | None

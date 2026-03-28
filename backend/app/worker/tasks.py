@@ -28,10 +28,12 @@ from app.models import Analysis, AnalysisStatus, ProReference
 from app.pro_references.loader import ProReferenceDB
 from app.services.db import get_session
 from app.services.s3 import download_video
+from app.worker.deviation_annotator import compute_frame_deviations
 from app.worker.dtw_comparator import compare_swing
 from app.worker.feature_engine import extract_features
 from app.worker.feedback_generator import generate_coaching_feedback
 from app.worker.frame_extractor import extract_frames
+from app.worker.phase_aligner import align_phases, resample_landmarks
 from app.worker.pose_estimator import extract_poses
 
 logger = logging.getLogger(__name__)
@@ -90,6 +92,10 @@ async def _write_results(
     overall_score: float,
     processing_time_ms: int,
     pro_landmarks: list | None = None,
+    aligned_pro_landmarks: list | None = None,
+    frame_mapping: list | None = None,
+    frame_deviations: list | None = None,
+    phase_boundaries: dict | None = None,
 ) -> None:
     async with get_session() as session:
         result = await session.execute(
@@ -103,6 +109,10 @@ async def _write_results(
         analysis.coaching_feedback = coaching_feedback
         analysis.overall_score = overall_score
         analysis.pro_landmarks = pro_landmarks
+        analysis.aligned_pro_landmarks = aligned_pro_landmarks
+        analysis.frame_mapping = frame_mapping
+        analysis.frame_deviations = frame_deviations
+        analysis.phase_boundaries = phase_boundaries
         analysis.completed_at = datetime.now(timezone.utc)
         analysis.processing_time_ms = processing_time_ms
 
@@ -259,7 +269,57 @@ def process_analysis(analysis_id: str) -> None:
             time.perf_counter() - t0,
         )
 
-        # 9. Claude coaching feedback
+        # 9. Phase alignment and deviation annotation
+        t0 = time.perf_counter()
+        logger.info("[%s] Running phase alignment", analysis_id)
+        aligned_pro_landmarks_list: list | None = None
+        frame_mapping_list: list | None = None
+        frame_deviations_list: list | None = None
+        phase_boundaries_dict: dict | None = None
+
+        pro_landmarks_np: np.ndarray | None = None
+        if pro_landmarks_for_storage is not None:
+            pro_landmarks_np = np.array(pro_landmarks_for_storage, dtype=np.float32)
+
+        if pro_landmarks_np is not None and pro_landmarks_np.ndim == 3:
+            pro_phases = pro_ref.get("phases", {})
+            user_frame_count = pose_result.landmarks.shape[0]
+            pro_frame_count  = pro_landmarks_np.shape[0]
+
+            alignment = align_phases(
+                user_phases=features.phases,
+                pro_phases=pro_phases,
+                user_frame_count=user_frame_count,
+                pro_frame_count=pro_frame_count,
+            )
+            frame_mapping_list = alignment.frame_mapping
+
+            # Resample pro landmarks to exactly match user frame count
+            aligned_pro_np = resample_landmarks(pro_landmarks_np, user_frame_count)
+            aligned_pro_landmarks_list = aligned_pro_np.tolist()
+
+            # Per-frame deviation annotation
+            frame_devs = compute_frame_deviations(
+                user_landmarks=pose_result.landmarks,
+                pro_landmarks_aligned=aligned_pro_np,
+                phases=features.phases,
+                deviations=comparison.deviations,
+            )
+            frame_deviations_list = [asdict(fd) for fd in frame_devs]
+
+            # Phase boundaries as plain dicts for JSON storage
+            phase_boundaries_dict = {
+                name: asdict(pb) for name, pb in alignment.phase_boundaries.items()
+            }
+            logger.info(
+                "[%s] Phase alignment done: %d phases, %d deviation frames (%.1fs)",
+                analysis_id, len(alignment.phase_boundaries),
+                len(frame_devs), time.perf_counter() - t0,
+            )
+        else:
+            logger.warning("[%s] No pro landmarks available — skipping phase alignment", analysis_id)
+
+        # 10. Claude coaching feedback
         t0 = time.perf_counter()
         logger.info("[%s] Generating coaching feedback", analysis_id)
         if settings.anthropic_api_key:
@@ -273,13 +333,13 @@ def process_analysis(analysis_id: str) -> None:
                              "priority_fixes": [], "positive_notes": [], "drill_plan": []}
         logger.info("[%s] Feedback done (%.1fs)", analysis_id, time.perf_counter() - t0)
 
-        # 10. Serialize results for JSON storage
+        # 11. Serialize results for JSON storage
         pose_data_serializable = pose_result.landmarks.tolist()
         deviations_serializable = [asdict(d) for d in comparison.deviations]
 
         processing_time_ms = int((time.perf_counter() - t_start) * 1000)
 
-        # 11. Write completed results to DB
+        # 12. Write completed results to DB
         asyncio.run(_write_results(
             analysis_id=analysis_id,
             pose_data=pose_data_serializable,
@@ -289,6 +349,10 @@ def process_analysis(analysis_id: str) -> None:
             overall_score=comparison.overall_score,
             processing_time_ms=processing_time_ms,
             pro_landmarks=pro_landmarks_for_storage,
+            aligned_pro_landmarks=aligned_pro_landmarks_list,
+            frame_mapping=frame_mapping_list,
+            frame_deviations=frame_deviations_list,
+            phase_boundaries=phase_boundaries_dict,
         ))
 
         logger.info(

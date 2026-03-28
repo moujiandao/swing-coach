@@ -17,6 +17,21 @@
 
 ---
 
+## [2026-03-28] Phase alignment and deviation annotation engine (Task 4.1)
+
+### Added
+- `phase_aligner.py` — `align_phases()` builds a per-frame mapping from user swing to pro reference via linear interpolation within each phase; `resample_landmarks()` resamples (N,33,3) arrays to any target length; `PhaseAlignmentResult` and `PhaseBoundary` dataclasses with tempo ratios
+- `deviation_annotator.py` — `compute_frame_deviations()` annotates each frame with which joints are deviating (angle diff > 10°) and maps joints to MediaPipe landmark indices for skeleton highlighting; `FrameDeviation` and `JointDeviation` dataclasses
+- Alembic migration `d4f8b2e1a736` — adds `aligned_pro_landmarks`, `frame_mapping`, `frame_deviations`, `phase_boundaries` JSON columns to `analyses`
+- `tests/test_phase_aligner.py` — 25 tests covering identical lengths, interpolation, missing phases, tempo ratios, resample shape/values
+- `tests/test_deviation_annotator.py` — 25 tests covering landmark map, angle computation, phase boundaries, direction ("too_wide"/"too_narrow"), severity propagation
+
+### Changed
+- `Analysis` model and `AnalysisResponse` schema — expose all four new overlay fields
+- `process_analysis` worker task — after DTW comparison, runs phase alignment, resamples pro landmarks, runs deviation annotation, stores all overlay data on the Analysis record
+
+---
+
 ## [2026-03-27] Wire Upload page to pro reference library (Task 3.4)
 
 ### Added
