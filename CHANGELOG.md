@@ -17,6 +17,15 @@
 
 ---
 
+## [2026-03-27] Pro reference library UI (Task 3.3)
+
+### Added
+- Add `getProReferences`, `getProReference`, `createProReference`, `confirmProReference`, `deleteProReference`, `reprocessProReference` to `frontend/src/lib/api.js`
+- Create `frontend/src/pages/ProLibrary.jsx`: full-width page with filter bar (stroke type, status), responsive 3/2/1 grid, skeleton loading, empty state, auto-poll every 5s while any card is processing/pending, toast on upload success
+- Create `frontend/src/components/ProReferenceCard.jsx`: thumbnail (or SVG silhouette), stroke badge, status indicator (dot + label), built-in badge, hover scale effect, context menu (reprocess/delete) with delete confirmation overlay
+- Create `frontend/src/components/AddProReferenceModal.jsx`: player name input, stroke selector, VideoUploader reuse, presigned URL upload with progress bar, confirm call, success toast on close
+- Add `/library` route and "Library" nav link (between Upload and History) to `frontend/src/App.jsx`
+
 ## [2026-03-27] Pro reference upload pipeline
 
 ### Added

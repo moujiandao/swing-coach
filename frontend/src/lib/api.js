@@ -41,4 +41,47 @@ export async function getHistory(limit = 20) {
   return data
 }
 
+// ---------------------------------------------------------------------------
+// Pro reference library
+// ---------------------------------------------------------------------------
+
+/** @returns {ProReferenceListItem[]} */
+export async function getProReferences(filters = {}) {
+  const { data } = await api.get('/api/pro-references', { params: filters })
+  return data
+}
+
+/** @returns {ProReferenceResponse} */
+export async function getProReference(id) {
+  const { data } = await api.get(`/api/pro-references/${id}`)
+  return data
+}
+
+/** @returns {{ reference_id: string, upload_url: string, s3_key: string }} */
+export async function createProReference(playerName, strokeType, metadata) {
+  const { data } = await api.post('/api/pro-references', {
+    player_name: playerName,
+    stroke_type: strokeType,
+    metadata_json: metadata ?? null,
+  })
+  return data
+}
+
+/** @returns {{ reference_id: string, status: string }} */
+export async function confirmProReference(referenceId) {
+  const { data } = await api.post(`/api/pro-references/${referenceId}/confirm`)
+  return data
+}
+
+/** @returns {void} */
+export async function deleteProReference(referenceId) {
+  await api.delete(`/api/pro-references/${referenceId}`)
+}
+
+/** @returns {{ reference_id: string, status: string }} */
+export async function reprocessProReference(referenceId) {
+  const { data } = await api.post(`/api/pro-references/${referenceId}/reprocess`)
+  return data
+}
+
 export default api

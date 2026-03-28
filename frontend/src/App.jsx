@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
 import Upload from './pages/Upload'
 import Analysis from './pages/Analysis'
 import History from './pages/History'
+import ProLibrary from './pages/ProLibrary'
 import NotFound from './pages/NotFound'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -21,6 +22,7 @@ function NavBar() {
         </Link>
         <nav className="flex gap-2">
           <NavLink to="/" end className={linkClass}>Upload</NavLink>
+          <NavLink to="/library" className={linkClass}>Library</NavLink>
           <NavLink to="/history" className={linkClass}>History</NavLink>
         </nav>
       </div>
@@ -49,6 +51,7 @@ export default function App() {
               <Route path="/" element={<Upload />} />
               <Route path="/analysis/:id" element={<Analysis />} />
               <Route path="/history" element={<History />} />
+              <Route path="/library" element={<ProLibrary />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </ErrorBoundary>
