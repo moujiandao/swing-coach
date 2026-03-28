@@ -96,6 +96,7 @@ async def _write_results(
     frame_mapping: list | None = None,
     frame_deviations: list | None = None,
     phase_boundaries: dict | None = None,
+    fps: float | None = None,
 ) -> None:
     async with get_session() as session:
         result = await session.execute(
@@ -113,6 +114,7 @@ async def _write_results(
         analysis.frame_mapping = frame_mapping
         analysis.frame_deviations = frame_deviations
         analysis.phase_boundaries = phase_boundaries
+        analysis.fps = fps
         analysis.completed_at = datetime.now(timezone.utc)
         analysis.processing_time_ms = processing_time_ms
 
@@ -353,6 +355,7 @@ def process_analysis(analysis_id: str) -> None:
             frame_mapping=frame_mapping_list,
             frame_deviations=frame_deviations_list,
             phase_boundaries=phase_boundaries_dict,
+            fps=fps,
         ))
 
         logger.info(

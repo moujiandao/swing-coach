@@ -97,6 +97,8 @@ class Analysis(Base):
     frame_mapping: Mapped[list | None] = mapped_column(JSON, nullable=True)
     frame_deviations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     phase_boundaries: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Video frame rate — needed by frontend for playback speed
+    fps: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -183,6 +185,7 @@ class AnalysisResponse(BaseModel):
     frame_mapping: list | None
     frame_deviations: list | None
     phase_boundaries: dict | None
+    fps: float | None
     created_at: datetime
     completed_at: datetime | None
     processing_time_ms: int | None
@@ -242,3 +245,45 @@ class ProReferenceListItem(BaseModel):
     @field_serializer("id")
     def serialize_id(self, v: uuid.UUID) -> str:
         return str(v)
+
+
+# ---------------------------------------------------------------------------
+# Skeleton overlay constants and response schemas (Task 4.2)
+# ---------------------------------------------------------------------------
+
+# BlazePose landmark pairs that form the skeleton bones the frontend draws.
+# Each pair is [landmark_a, landmark_b].  All indices are < 33.
+LANDMARK_CONNECTIONS: list[list[int]] = [
+    [11, 12],   # shoulders
+    [11, 13],   # left shoulder → left elbow
+    [13, 15],   # left elbow → left wrist
+    [12, 14],   # right shoulder → right elbow
+    [14, 16],   # right elbow → right wrist
+    [11, 23],   # left shoulder → left hip
+    [12, 24],   # right shoulder → right hip
+    [23, 24],   # hips
+    [23, 25],   # left hip → left knee
+    [25, 27],   # left knee → left ankle
+    [24, 26],   # right hip → right knee
+    [26, 28],   # right knee → right ankle
+]
+
+
+class OverlayResponse(BaseModel):
+    """Full overlay dataset for the analysis canvas renderer."""
+    user_landmarks: list           # [frame][landmark_idx][x, y, z]
+    pro_landmarks: list            # [frame][landmark_idx][x, y, z] — phase-aligned
+    frame_mapping: list            # frame_mapping[user_frame] = pro_frame
+    frame_deviations: list         # per-frame joint deviation annotations
+    phase_boundaries: dict         # phase name → PhaseBoundary dict
+    fps: float                     # video frame rate for playback timing
+    landmark_connections: list[list[int]]  # bone pairs for skeleton drawing
+
+
+class ProPreviewResponse(BaseModel):
+    """Skeleton preview data for the Pro Library page."""
+    landmarks: list                # [frame][landmark_idx][x, y, z]
+    phases: dict                   # phase name → {start, end}
+    fps: float
+    frame_count: int
+    landmark_connections: list[list[int]]

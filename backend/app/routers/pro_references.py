@@ -7,14 +7,19 @@ Handles the full lifecycle of user-uploaded pro swing references:
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    LANDMARK_CONNECTIONS,
+    ProPreviewResponse,
     ProReference,
     ProReferenceCreate,
     ProReferenceListItem,
@@ -202,6 +207,72 @@ async def get_pro_reference(
     """Return full detail for one pro reference."""
     ref = await _get_or_404(db, reference_id)
     return ProReferenceResponse.model_validate(ref)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/pro-references/{id}/preview
+# ---------------------------------------------------------------------------
+
+@router.get("/{reference_id}/preview", response_model=ProPreviewResponse, status_code=status.HTTP_200_OK)
+async def get_pro_reference_preview(
+    reference_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """
+    Returns the skeleton landmark data for an animated preview in the Pro Library.
+
+    Requires status=ready and a processed .npz file.  Landmark coordinates are
+    rounded to 4 decimal places.  Response is immutably cacheable once ready.
+    """
+    ref = await _get_or_404(db, reference_id)
+
+    if ref.status != ProReferenceStatus.ready:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Preview not available — reference status is '{ref.status.value}'",
+        )
+
+    if not ref.npz_path or not Path(ref.npz_path).exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Preview data not available — .npz file missing",
+        )
+
+    data = np.load(ref.npz_path, allow_pickle=False)
+
+    if "_landmarks" not in data.files:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Preview data not available — landmarks not in .npz",
+        )
+
+    landmarks_raw = data["_landmarks"]  # (N, 33, 3)
+    landmarks_rounded = np.round(landmarks_raw.astype(np.float64), 4).tolist()
+
+    # Reconstruct phases dict from stored key/value arrays
+    phases: dict = {}
+    if "_phase_keys" in data.files and "_phase_values" in data.files:
+        phase_keys = [str(k) for k in data["_phase_keys"]]
+        phase_values = data["_phase_values"]
+        phases = {
+            k: {"start": int(phase_values[i, 0]), "end": int(phase_values[i, 1])}
+            for i, k in enumerate(phase_keys)
+        }
+
+    fps = float(data["_fps"]) if "_fps" in data.files else (ref.fps or 30.0)
+    frame_count = int(data["_frame_count"]) if "_frame_count" in data.files else landmarks_raw.shape[0]
+
+    payload = ProPreviewResponse(
+        landmarks=landmarks_rounded,
+        phases=phases,
+        fps=fps,
+        frame_count=frame_count,
+        landmark_connections=LANDMARK_CONNECTIONS,
+    )
+
+    response = JSONResponse(content=payload.model_dump())
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 # ---------------------------------------------------------------------------

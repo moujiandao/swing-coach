@@ -17,6 +17,22 @@
 
 ---
 
+## [2026-03-28] Overlay data API and pro reference preview (Task 4.2)
+
+### Added
+- `GET /api/analysis/{id}/overlay` — returns user+pro landmarks, frame mapping, per-frame deviations, phase boundaries, fps, and skeleton bone connections; coordinates rounded to 4dp; `Cache-Control: immutable` on completed analyses
+- `GET /api/pro-references/{id}/preview` — returns pro reference landmark array + phases + fps for animated skeleton preview in the library; loads directly from .npz; `Cache-Control: immutable`
+- `LANDMARK_CONNECTIONS` constant in `models.py` — 12 BlazePose bone pairs, all indices validated < 33
+- `OverlayResponse` and `ProPreviewResponse` Pydantic schemas
+- `fps` column on `Analysis` model; stored by `process_analysis`; Alembic migration `e9a2c3d5f617`
+- `tests/test_overlay_api.py` — 28 tests covering shape, 404s, rounding, Cache-Control, landmark connection validity
+
+### Changed
+- `analysis.py` — `_round_landmarks()` helper rounds nested lists via numpy
+- `tasks.py` — stores `fps` in `_write_results`
+
+---
+
 ## [2026-03-28] Phase alignment and deviation annotation engine (Task 4.1)
 
 ### Added
