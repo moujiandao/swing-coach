@@ -11,11 +11,11 @@
 - Task 4.3: Keyframe extraction per phase + S3 upload + `keyframe_s3_keys` on Analysis + presigned `video_url`/`keyframe_urls` in analysis and overlay endpoints + local dev static file serving via `/uploads/`
 - Task 5.1: `DualSkeletonCanvas` component (video + dual skeleton + deviation glow + phase label) + `SkeletonLegend` + `src/lib/landmarks.js` utilities + `/dev/overlay-test` page with synthetic data
 - Task 5.2: `useVideoPlayback` hook (rAF-based, configurable speed) + `VideoScrubber` (phase-gradient track, transport controls, phase jump buttons) + `PhaseTimeline` (proportional segments, tempo badges, cursor line)
+- Task 5.3: `ComparisonView` (overlay/side-by-side modes, ResizeObserver canvas sizing, mobile fallback) + `DeviationTimeline` (colored dots by severity, hover tooltips, click-to-seek) + `FrameDeviationPanel` (collapsible, live per-frame joint data) + `useOverlayData` hook + integrated into `Analysis.jsx` with loading/error/degradation states
+- Task 5.4: Keyboard shortcuts (Space/arrows/1-5/S/P/D/M/[/]/) + `KeyboardShortcutsHelp` overlay + `DualSkeletonCanvas` polish (frame counter, phase-colored border ring, skeleton fade animation, aggressive critical deviation pulse) + breadcrumbs + page title on Analysis page
 
 **Next tasks (FEATURE_SPEC_V2.md):**
-- Task 5.3: Comparison view (side-by-side + overlay modes)
-- Task 5.4: Polish
-- Task 6.1: Integration
+- Task 6.1: End-to-end integration test and CLAUDE.md update
 
 ---
 

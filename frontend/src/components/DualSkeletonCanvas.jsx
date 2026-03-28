@@ -4,30 +4,41 @@ import { transformLandmarks, getDeviationsForFrame, getCurrentPhase } from '../l
 // ---------------------------------------------------------------------------
 // Color palette
 // ---------------------------------------------------------------------------
-const USER_COLOR = '#00D4FF'   // cyan
-const PRO_COLOR = '#FFD700'    // gold
+const USER_COLOR = '#00D4FF'
+const PRO_COLOR  = '#FFD700'
 const SEVERITY_COLOR = {
   critical: '#EF4444',
   moderate: '#F59E0B',
-  minor: '#3B82F6',
+  minor:    '#3B82F6',
 }
 const SEVERITY_LINE_WIDTH = { critical: 3, moderate: 2, minor: 1.5 }
+
+// Phase border colors — match PHASE_COLORS in VideoScrubber
+const PHASE_BORDER = {
+  preparation:    '#4b5563',
+  backswing:      '#1d4ed8',
+  forward_swing:  '#15803d',
+  contact:        '#ca8a04',
+  follow_through: '#7c3aed',
+}
+
+// Fade speed: fraction of remaining distance closed per frame (~16ms)
+const FADE_RATE = 0.15
 
 // ---------------------------------------------------------------------------
 // Pure canvas drawing helpers
 // ---------------------------------------------------------------------------
 
-function drawSkeleton(ctx, coords, connections, color, dashed) {
-  if (!coords.length) return
+function drawSkeleton(ctx, coords, connections, color, dashed, alpha) {
+  if (!coords.length || alpha < 0.01) return
   ctx.save()
-  ctx.globalAlpha = 0.7
+  ctx.globalAlpha = 0.7 * alpha
   ctx.strokeStyle = color
   ctx.fillStyle = color
   ctx.lineWidth = 2
   ctx.setLineDash(dashed ? [6, 3] : [])
   ctx.lineCap = 'round'
 
-  // Bones
   ctx.beginPath()
   for (const [a, b] of connections) {
     const ca = coords[a]
@@ -38,9 +49,8 @@ function drawSkeleton(ctx, coords, connections, color, dashed) {
   }
   ctx.stroke()
 
-  // Landmark dots
   ctx.setLineDash([])
-  ctx.globalAlpha = 0.85
+  ctx.globalAlpha = 0.85 * alpha
   for (const coord of coords) {
     if (!coord) continue
     ctx.beginPath()
@@ -57,28 +67,29 @@ function drawDeviationHighlights(ctx, coords, frameDevs, pulseAngle) {
   for (const dev of frameDevs) {
     const color = SEVERITY_COLOR[dev.severity] || SEVERITY_COLOR.moderate
     const lw = SEVERITY_LINE_WIDTH[dev.severity] || 2
+    const isCritical = dev.severity === 'critical'
+    // Critical deviations pulse more aggressively
+    const effectivePulse = isCritical ? 0.4 + 0.6 * Math.sin(pulseAngle * 1.5) : pulse
 
     for (const jd of dev.deviating_joints || []) {
-      // Glow circle on each landmark of this joint
       for (const idx of jd.landmark_indices || []) {
         const coord = coords[idx]
         if (!coord) continue
         const [x, y] = coord
-        const radius = 12 + 5 * pulse
+        const radius = 12 + 6 * effectivePulse
 
         ctx.save()
         ctx.shadowColor = color
-        ctx.shadowBlur = 18
+        ctx.shadowBlur = isCritical ? 24 : 18
         ctx.beginPath()
         ctx.arc(x, y, radius, 0, 2 * Math.PI)
         ctx.strokeStyle = color
         ctx.lineWidth = lw
-        ctx.globalAlpha = 0.75 + 0.25 * pulse
+        ctx.globalAlpha = 0.75 + 0.25 * effectivePulse
         ctx.stroke()
         ctx.restore()
       }
 
-      // Angle diff label at the first landmark of this joint
       const firstIdx = jd.landmark_indices?.[0]
       if (firstIdx != null && coords[firstIdx] != null && jd.diff_degrees != null) {
         const [lx, ly] = coords[firstIdx]
@@ -86,7 +97,6 @@ function drawDeviationHighlights(ctx, coords, frameDevs, pulseAngle) {
         ctx.save()
         ctx.font = 'bold 11px monospace'
         ctx.globalAlpha = 1.0
-        // Shadow for readability on any background
         ctx.shadowColor = 'rgba(0,0,0,0.8)'
         ctx.shadowBlur = 4
         ctx.fillStyle = color
@@ -102,15 +112,30 @@ function drawPhaseLabel(ctx, phaseName) {
   ctx.save()
   ctx.font = 'bold 12px sans-serif'
   const textWidth = ctx.measureText(phaseName).width
-  // Background pill
   ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
   ctx.beginPath()
   ctx.roundRect(8, 8, textWidth + 16, 26, 6)
   ctx.fill()
-  // Label
   ctx.fillStyle = '#ffffff'
   ctx.globalAlpha = 0.9
   ctx.fillText(phaseName, 16, 26)
+  ctx.restore()
+}
+
+function drawFrameCounter(ctx, currentFrame, totalFrames, width) {
+  if (totalFrames <= 0) return
+  const label = `F ${currentFrame}/${totalFrames - 1}`
+  ctx.save()
+  ctx.font = '10px monospace'
+  ctx.globalAlpha = 0.7
+  const textWidth = ctx.measureText(label).width
+  // Background pill in top-right
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+  ctx.beginPath()
+  ctx.roundRect(width - textWidth - 24, 8, textWidth + 16, 20, 4)
+  ctx.fill()
+  ctx.fillStyle = '#d1d5db'
+  ctx.fillText(label, width - textWidth - 16, 22)
   ctx.restore()
 }
 
@@ -118,14 +143,6 @@ function drawPhaseLabel(ctx, phaseName) {
 // Component
 // ---------------------------------------------------------------------------
 
-/**
- * DualSkeletonCanvas
- *
- * Renders a user swing skeleton (cyan) and a pro reference skeleton (gold dashed)
- * on top of the user's video frame, with deviation highlighting and phase label.
- *
- * The parent controls `currentFrame` — this component just draws what it's told.
- */
 export default function DualSkeletonCanvas({
   videoSrc,
   userLandmarks,
@@ -146,61 +163,70 @@ export default function DualSkeletonCanvas({
   const pulseRef = useRef(0)
   const rafRef = useRef(null)
 
-  // Build a stable render function so the rAF loop can always call the latest version
+  // Fade state: current rendered alpha for each skeleton (0–1)
+  const userAlphaRef = useRef(showUserSkeleton ? 1 : 0)
+  const proAlphaRef  = useRef(showProSkeleton  ? 1 : 0)
+
   const renderRef = useRef(null)
+
+  const totalFrames = userLandmarks?.length ?? (proLandmarks?.length ?? 0)
 
   const render = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
 
-    // Dark background
     ctx.fillStyle = '#0f172a'
     ctx.fillRect(0, 0, width, height)
 
-    // Video frame (drawn if video is seeked and has data)
     const video = videoRef.current
     if (video && video.readyState >= 2) {
       ctx.drawImage(video, 0, 0, width, height)
     }
 
-    const userLm = userLandmarks?.[currentFrame]
-    const proLm = proLandmarks?.[currentFrame]
+    const userLm   = userLandmarks?.[currentFrame]
+    const proLm    = proLandmarks?.[currentFrame]
     const frameDevs = getDeviationsForFrame(frameDeviations, currentFrame)
     const phaseName = getCurrentPhase(phaseBoundaries, currentFrame)
 
     const userCoords = userLm ? transformLandmarks(userLm, width, height) : []
-    const proCoords = proLm ? transformLandmarks(proLm, width, height) : []
+    const proCoords  = proLm  ? transformLandmarks(proLm,  width, height) : []
 
-    // Pro skeleton first (behind user)
-    if (showProSkeleton && proCoords.length) {
-      drawSkeleton(ctx, proCoords, landmarkConnections || [], PRO_COLOR, true)
+    // Advance fade values toward their targets
+    const userTarget = showUserSkeleton ? 1 : 0
+    const proTarget  = showProSkeleton  ? 1 : 0
+    userAlphaRef.current += (userTarget - userAlphaRef.current) * FADE_RATE
+    proAlphaRef.current  += (proTarget  - proAlphaRef.current)  * FADE_RATE
+
+    // Pro skeleton (behind user)
+    if (proCoords.length) {
+      drawSkeleton(ctx, proCoords, landmarkConnections || [], PRO_COLOR, true, proAlphaRef.current)
     }
 
     // User skeleton on top
-    if (showUserSkeleton && userCoords.length) {
-      drawSkeleton(ctx, userCoords, landmarkConnections || [], USER_COLOR, false)
+    if (userCoords.length) {
+      drawSkeleton(ctx, userCoords, landmarkConnections || [], USER_COLOR, false, userAlphaRef.current)
     }
 
-    // Deviation highlights (on user joints)
+    // Deviation highlights
     if (showDeviations && userCoords.length && frameDevs.length) {
       drawDeviationHighlights(ctx, userCoords, frameDevs, pulseRef.current)
     }
 
-    // Phase label
+    // Phase label (top-left)
     drawPhaseLabel(ctx, phaseName)
+
+    // Frame counter (top-right)
+    drawFrameCounter(ctx, currentFrame, totalFrames, width)
   }, [
     userLandmarks, proLandmarks, frameDeviations, landmarkConnections,
     phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
-    showDeviations, width, height,
+    showDeviations, width, height, totalFrames,
   ])
 
-  // Keep renderRef in sync so the rAF loop always calls the latest closure
-  useEffect(() => {
-    renderRef.current = render
-  }, [render])
+  useEffect(() => { renderRef.current = render }, [render])
 
-  // rAF loop — advances the pulse and calls render every frame
+  // rAF loop
   useEffect(() => {
     function loop() {
       pulseRef.current += 0.05
@@ -216,15 +242,33 @@ export default function DualSkeletonCanvas({
     const video = videoRef.current
     if (!video || !videoSrc || fps <= 0) return
     const targetTime = currentFrame / fps
-    // Only seek if we're more than half a frame away to avoid thrashing
     if (Math.abs(video.currentTime - targetTime) > 0.5 / fps) {
       video.currentTime = targetTime
     }
   }, [currentFrame, fps, videoSrc])
 
+  // Derive phase name for the border color (raw key, not formatted)
+  let currentPhaseKey = null
+  if (phaseBoundaries) {
+    for (const [name, b] of Object.entries(phaseBoundaries)) {
+      const start = b.user_start ?? b.start ?? 0
+      const end   = b.user_end   ?? b.end   ?? 0
+      if (currentFrame >= start && currentFrame <= end) {
+        currentPhaseKey = name
+        break
+      }
+    }
+  }
+  const borderColor = PHASE_BORDER[currentPhaseKey] || '#374151'
+
   return (
-    <div className="relative inline-block">
-      {/* Hidden video element used only as a texture source for canvas */}
+    <div
+      className="relative inline-block rounded-lg overflow-hidden"
+      style={{
+        boxShadow: `0 0 0 2px ${borderColor}`,
+        transition: 'box-shadow 0.3s ease',
+      }}
+    >
       {videoSrc && (
         <video
           ref={videoRef}
@@ -240,7 +284,7 @@ export default function DualSkeletonCanvas({
         ref={canvasRef}
         width={width}
         height={height}
-        className="rounded-lg block"
+        className="block"
         style={{ background: '#0f172a' }}
       />
     </div>
