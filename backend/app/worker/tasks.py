@@ -27,7 +27,7 @@ from app.config import get_settings
 from app.models import Analysis, AnalysisStatus, ProReference
 from app.pro_references.loader import ProReferenceDB
 from app.services.db import get_session
-from app.services.s3 import download_video
+from app.services.s3 import download_video, upload_file
 from app.worker.deviation_annotator import compute_frame_deviations
 from app.worker.dtw_comparator import compare_swing
 from app.worker.feature_engine import extract_features
@@ -48,6 +48,37 @@ def _get_pro_db() -> ProReferenceDB:
         _pro_db = ProReferenceDB()
         _pro_db.load_all()
     return _pro_db
+
+
+# ---------------------------------------------------------------------------
+# Keyframe extraction helper
+# ---------------------------------------------------------------------------
+
+def _save_keyframes(
+    frame_paths: list[str],
+    phases: dict[str, tuple[int, int]],
+    work_dir: str,
+) -> dict[str, str]:
+    """
+    Save the first frame of each phase as a JPEG to work_dir.
+    Returns {phase_name: local_jpeg_path}.
+    Non-fatal: phases with unreadable frames are skipped.
+    """
+    import cv2
+
+    keyframes: dict[str, str] = {}
+    for phase_name, (start_frame, _end_frame) in phases.items():
+        if not frame_paths:
+            continue
+        idx = min(start_frame, len(frame_paths) - 1)
+        frame = cv2.imread(frame_paths[idx])
+        if frame is None:
+            logger.warning("Could not read frame %s for keyframe '%s'", frame_paths[idx], phase_name)
+            continue
+        out_path = str(Path(work_dir) / f"keyframe_{phase_name}.jpg")
+        cv2.imwrite(out_path, frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        keyframes[phase_name] = out_path
+    return keyframes
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +128,7 @@ async def _write_results(
     frame_deviations: list | None = None,
     phase_boundaries: dict | None = None,
     fps: float | None = None,
+    keyframe_s3_keys: dict | None = None,
 ) -> None:
     async with get_session() as session:
         result = await session.execute(
@@ -115,6 +147,7 @@ async def _write_results(
         analysis.frame_deviations = frame_deviations
         analysis.phase_boundaries = phase_boundaries
         analysis.fps = fps
+        analysis.keyframe_s3_keys = keyframe_s3_keys
         analysis.completed_at = datetime.now(timezone.utc)
         analysis.processing_time_ms = processing_time_ms
 
@@ -197,6 +230,25 @@ def process_analysis(analysis_id: str) -> None:
             handedness="right",  # TODO: accept from Analysis record in later sprint
         )
         logger.info("[%s] Features done (%.1fs)", analysis_id, time.perf_counter() - t0)
+
+        # 6.5. Extract keyframes at phase boundaries and upload to S3
+        keyframe_s3_keys: dict | None = None
+        try:
+            t0 = time.perf_counter()
+            logger.info("[%s] Extracting keyframes", analysis_id)
+            keyframe_local = _save_keyframes(frame_result.frame_paths, features.phases, work_dir)
+            keyframe_s3_keys = {}
+            for phase_name, local_path in keyframe_local.items():
+                s3_key = f"analyses/{analysis_id}/keyframes/phase_{phase_name}.jpg"
+                upload_file(local_path, s3_key, content_type="image/jpeg")
+                keyframe_s3_keys[phase_name] = s3_key
+            logger.info(
+                "[%s] Keyframes uploaded: %d phases (%.1fs)",
+                analysis_id, len(keyframe_s3_keys), time.perf_counter() - t0,
+            )
+        except Exception as kf_exc:
+            logger.warning("[%s] Keyframe extraction failed (non-fatal): %s", analysis_id, kf_exc)
+            keyframe_s3_keys = None
 
         # 7. Load pro reference
         t0 = time.perf_counter()
@@ -356,6 +408,7 @@ def process_analysis(analysis_id: str) -> None:
             frame_deviations=frame_deviations_list,
             phase_boundaries=phase_boundaries_dict,
             fps=fps,
+            keyframe_s3_keys=keyframe_s3_keys,
         ))
 
         logger.info(

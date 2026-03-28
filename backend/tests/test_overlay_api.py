@@ -295,7 +295,9 @@ class TestOverlayEndpoint:
     async def test_cache_control_header_set(self, client, completed_analysis):
         r = await client.get(f"/api/analysis/{completed_analysis.id}/overlay")
         assert "cache-control" in r.headers
-        assert "immutable" in r.headers["cache-control"]
+        # Overlay includes presigned URLs that expire in 1h — private short-lived cache
+        assert "private" in r.headers["cache-control"]
+        assert "3600" in r.headers["cache-control"]
 
     async def test_frame_deviations_returned(self, client, completed_analysis):
         r = await client.get(f"/api/analysis/{completed_analysis.id}/overlay")

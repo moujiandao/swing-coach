@@ -95,7 +95,9 @@ def test_local_dev_presigned_download_url(tmp_path, monkeypatch):
     with patch("app.services.s3.get_settings", return_value=Settings(s3_bucket="")):
         url = s3_module.generate_presigned_download_url("uploads/abc/vid.mp4")
 
-    assert url.startswith("file://")
+    # Local dev fallback now returns an HTTP path served by the StaticFiles mount
+    assert url.startswith("/uploads/")
+    assert "vid.mp4" in url
 
 
 # ---------------------------------------------------------------------------

@@ -99,6 +99,8 @@ class Analysis(Base):
     phase_boundaries: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Video frame rate — needed by frontend for playback speed
     fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Keyframe S3 keys per phase — populated by worker after analysis completes
+    keyframe_s3_keys: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -186,6 +188,10 @@ class AnalysisResponse(BaseModel):
     frame_deviations: list | None
     phase_boundaries: dict | None
     fps: float | None
+    keyframe_s3_keys: dict | None
+    # Computed at request time — not stored in DB
+    video_url: str | None = None
+    keyframe_urls: dict | None = None
     created_at: datetime
     completed_at: datetime | None
     processing_time_ms: int | None
@@ -278,6 +284,9 @@ class OverlayResponse(BaseModel):
     phase_boundaries: dict         # phase name → PhaseBoundary dict
     fps: float                     # video frame rate for playback timing
     landmark_connections: list[list[int]]  # bone pairs for skeleton drawing
+    # Presigned URLs generated at request time for video playback
+    video_url: str | None = None
+    keyframe_urls: dict | None = None
 
 
 class ProPreviewResponse(BaseModel):

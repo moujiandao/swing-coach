@@ -2,17 +2,37 @@
 
 ## Session status — 2026-03-28 end of session
 
-**Branch:** `feature/pro-reference-v2` — 232 tests passing, working tree clean
+**Branch:** `feature/pro-reference-v2` — 250 tests passing, working tree clean
 
 **Completed this session:**
 - Task 3.4: ProReferencePicker component + wire Upload page to DB-backed references + `pro_reference_id` FK on Analysis
 - Task 4.1: Phase alignment engine (`phase_aligner.py`) + deviation annotator (`deviation_annotator.py`) + 4 new overlay JSON columns on Analysis
 - Task 4.2: `GET /api/analysis/{id}/overlay` + `GET /api/pro-references/{id}/preview` endpoints + `LANDMARK_CONNECTIONS` constant + `fps` column on Analysis
+- Task 4.3: Keyframe extraction per phase + S3 upload + `keyframe_s3_keys` on Analysis + presigned `video_url`/`keyframe_urls` in analysis and overlay endpoints + local dev static file serving via `/uploads/`
 
 **Next tasks (FEATURE_SPEC_V2.md):**
-- Task 4.3: Annotated frame extraction for video overlay
 - Task 5.x: Frontend comparison UI (dual skeleton canvas, video scrubber, phase breakdown)
 - Task 6.1: Integration
+
+---
+
+## [2026-03-28]
+
+### Added
+- `keyframe_s3_keys` JSON column on `analyses` table (Alembic migration `f1c2d3e4b567`)
+- `_save_keyframes()` helper in `tasks.py` - extracts first frame of each phase as JPEG
+- Step 6.5 in `process_analysis` - extracts and uploads 5 keyframes to S3 after feature extraction; non-fatal on failure
+- `generate_presigned_urls(keys)` batch utility in `app/services/s3.py`
+- `video_url` and `keyframe_urls` fields on `AnalysisResponse` and `OverlayResponse` (computed at request time)
+- `_build_keyframe_urls()` helper in analysis router
+- `StaticFiles` mount at `/uploads` in `main.py` for local dev (no S3) so the frontend can load videos and keyframes via HTTP
+- `aiofiles` dependency (required by FastAPI StaticFiles)
+- 18 new tests in `test_keyframe_extraction.py`
+
+### Changed
+- `GET /api/analysis/{id}` now includes `video_url` (presigned) and `keyframe_urls` (dict of phase_name → presigned URL)
+- `GET /api/analysis/{id}/overlay` now includes `video_url` and `keyframe_urls`; Cache-Control changed from `immutable` to `private, max-age=3600` since presigned URLs expire in 1 hour
+- `generate_presigned_download_url` local dev fallback now returns `/uploads/{key}` HTTP path instead of `file://` URI (browser-usable)
 
 ---
 

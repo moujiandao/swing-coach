@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Analysis, AnalysisResponse, AnalysisStatus, LANDMARK_CONNECTIONS, OverlayResponse
 from app.services.db import get_db
+from app.services.s3 import generate_presigned_download_url, generate_presigned_urls
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,15 @@ def _round_landmarks(raw: list) -> list:
     """Round a nested [frame][landmark][coord] list to 4 decimal places."""
     arr = np.array(raw, dtype=np.float64)
     return np.round(arr, 4).tolist()
+
+
+def _build_keyframe_urls(keyframe_s3_keys: dict | None) -> dict | None:
+    """Convert {phase_name: s3_key} → {phase_name: presigned_url}."""
+    if not keyframe_s3_keys:
+        return None
+    keys = list(keyframe_s3_keys.values())
+    urls = generate_presigned_urls(keys)
+    return dict(zip(keyframe_s3_keys.keys(), urls))
 
 
 @router.get("/analysis/{analysis_id}", response_model=AnalysisResponse, status_code=status.HTTP_200_OK)
@@ -33,7 +43,11 @@ async def get_analysis(
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
 
-    return AnalysisResponse.model_validate(analysis)
+    resp = AnalysisResponse.model_validate(analysis)
+    return resp.model_copy(update={
+        "video_url": generate_presigned_download_url(analysis.video_s3_key),
+        "keyframe_urls": _build_keyframe_urls(analysis.keyframe_s3_keys),
+    })
 
 
 @router.get("/analysis/{analysis_id}/overlay", response_model=OverlayResponse, status_code=status.HTTP_200_OK)
@@ -79,10 +93,13 @@ async def get_analysis_overlay(
         phase_boundaries=analysis.phase_boundaries or {},
         fps=analysis.fps or 30.0,
         landmark_connections=LANDMARK_CONNECTIONS,
+        video_url=generate_presigned_download_url(analysis.video_s3_key),
+        keyframe_urls=_build_keyframe_urls(analysis.keyframe_s3_keys),
     )
 
     response = JSONResponse(content=payload.model_dump())
-    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    # Presigned URLs expire in 1 hour — use private short-lived cache instead of immutable
+    response.headers["Cache-Control"] = "private, max-age=3600"
     return response
 
 

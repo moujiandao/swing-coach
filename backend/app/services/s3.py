@@ -117,13 +117,13 @@ def delete_object(key: str) -> None:
 
 def generate_presigned_download_url(key: str) -> str:
     """
-    Returns a presigned GET URL for video playback (expires in 1 hour).
-    Falls back to a local file:// path when S3_BUCKET is not configured.
+    Returns a presigned GET URL for video/file access (expires in 1 hour).
+    Falls back to an HTTP path served by the local StaticFiles mount when
+    S3_BUCKET is not configured.
     """
     if not _is_s3_configured():
-        dest = _LOCAL_UPLOAD_DIR / key
-        logger.info("S3 not configured — local dev download path: %s", dest)
-        return dest.resolve().as_uri()
+        logger.info("S3 not configured — using local dev HTTP path for key: %s", key)
+        return f"/uploads/{key}"
 
     settings = get_settings()
     try:
@@ -136,3 +136,11 @@ def generate_presigned_download_url(key: str) -> str:
     except ClientError as exc:
         logger.error("Failed to generate presigned download URL for %s: %s", key, exc)
         raise
+
+
+def generate_presigned_urls(keys: list[str]) -> list[str]:
+    """
+    Batch presigned URL generation. Returns one URL per key, in the same order.
+    Uses generate_presigned_download_url for each key.
+    """
+    return [generate_presigned_download_url(key) for key in keys]
