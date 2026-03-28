@@ -75,6 +75,46 @@ def download_video(s3_key: str, local_path: str) -> None:
     logger.info("Downloaded s3://%s/%s → %s", settings.s3_bucket, s3_key, local_path)
 
 
+def upload_file(local_path: str, key: str, content_type: str = "application/octet-stream") -> None:
+    """
+    Upload a local file to S3 (or copy to local uploads dir in dev).
+    """
+    import shutil
+
+    if not _is_s3_configured():
+        dest = _LOCAL_UPLOAD_DIR / key
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(local_path, dest)
+        logger.info("Local dev — copied %s → %s", local_path, dest)
+        return
+
+    settings = get_settings()
+    _s3_client().upload_file(
+        local_path, settings.s3_bucket, key, ExtraArgs={"ContentType": content_type}
+    )
+    logger.info("Uploaded %s → s3://%s/%s", local_path, settings.s3_bucket, key)
+
+
+def delete_object(key: str) -> None:
+    """
+    Delete an object from S3 (or local uploads dir in dev). No-op if the key
+    does not exist.
+    """
+    if not _is_s3_configured():
+        dest = _LOCAL_UPLOAD_DIR / key
+        if dest.exists():
+            dest.unlink()
+            logger.info("Local dev — deleted %s", dest)
+        return
+
+    settings = get_settings()
+    try:
+        _s3_client().delete_object(Bucket=settings.s3_bucket, Key=key)
+        logger.info("Deleted s3://%s/%s", settings.s3_bucket, key)
+    except ClientError as exc:
+        logger.warning("Failed to delete S3 object %s: %s", key, exc)
+
+
 def generate_presigned_download_url(key: str) -> str:
     """
     Returns a presigned GET URL for video playback (expires in 1 hour).
