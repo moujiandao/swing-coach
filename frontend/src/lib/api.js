@@ -38,6 +38,17 @@ export async function getAnalysis(analysisId) {
 }
 
 /**
+ * Fetch the full overlay dataset for canvas rendering.
+ * Includes user_landmarks, pro_landmarks, frame_deviations, phase_boundaries,
+ * video_url, keyframe_urls, and landmark_connections.
+ * @returns {OverlayResponse}
+ */
+export async function getOverlay(analysisId) {
+  const { data } = await api.get(`/api/analysis/${analysisId}/overlay`)
+  return data
+}
+
+/**
  * Fetch the user's analysis history.
  * @returns {AnalysisResponse[]}
  */

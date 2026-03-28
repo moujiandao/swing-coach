@@ -1,10 +1,16 @@
 import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
+import { Suspense, lazy } from 'react'
 import Upload from './pages/Upload'
 import Analysis from './pages/Analysis'
 import History from './pages/History'
 import ProLibrary from './pages/ProLibrary'
 import NotFound from './pages/NotFound'
 import ErrorBoundary from './components/ErrorBoundary'
+
+// Dev-only page — lazy-loaded so it is excluded from production chunk analysis
+const DevOverlayTest = import.meta.env.DEV
+  ? lazy(() => import('./pages/DevOverlayTest'))
+  : null
 
 function NavBar() {
   const linkClass = ({ isActive }) =>
@@ -52,6 +58,16 @@ export default function App() {
               <Route path="/analysis/:id" element={<Analysis />} />
               <Route path="/history" element={<History />} />
               <Route path="/library" element={<ProLibrary />} />
+              {import.meta.env.DEV && DevOverlayTest && (
+                <Route
+                  path="/dev/overlay-test"
+                  element={
+                    <Suspense fallback={<div className="text-gray-400 py-8 text-center text-sm">Loading…</div>}>
+                      <DevOverlayTest />
+                    </Suspense>
+                  }
+                />
+              )}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </ErrorBoundary>

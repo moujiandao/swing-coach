@@ -9,9 +9,12 @@
 - Task 4.1: Phase alignment engine (`phase_aligner.py`) + deviation annotator (`deviation_annotator.py`) + 4 new overlay JSON columns on Analysis
 - Task 4.2: `GET /api/analysis/{id}/overlay` + `GET /api/pro-references/{id}/preview` endpoints + `LANDMARK_CONNECTIONS` constant + `fps` column on Analysis
 - Task 4.3: Keyframe extraction per phase + S3 upload + `keyframe_s3_keys` on Analysis + presigned `video_url`/`keyframe_urls` in analysis and overlay endpoints + local dev static file serving via `/uploads/`
+- Task 5.1: `DualSkeletonCanvas` component (video + dual skeleton + deviation glow + phase label) + `SkeletonLegend` + `src/lib/landmarks.js` utilities + `/dev/overlay-test` page with synthetic data
 
 **Next tasks (FEATURE_SPEC_V2.md):**
-- Task 5.x: Frontend comparison UI (dual skeleton canvas, video scrubber, phase breakdown)
+- Task 5.2: Video scrubber and phase timeline
+- Task 5.3: Comparison view (side-by-side + overlay modes)
+- Task 5.4: Polish
 - Task 6.1: Integration
 
 ---
@@ -33,6 +36,19 @@
 - `GET /api/analysis/{id}` now includes `video_url` (presigned) and `keyframe_urls` (dict of phase_name → presigned URL)
 - `GET /api/analysis/{id}/overlay` now includes `video_url` and `keyframe_urls`; Cache-Control changed from `immutable` to `private, max-age=3600` since presigned URLs expire in 1 hour
 - `generate_presigned_download_url` local dev fallback now returns `/uploads/{key}` HTTP path instead of `file://` URI (browser-usable)
+
+## [2026-03-28] Task 5.1
+
+### Added
+- `frontend/src/lib/landmarks.js`: `transformLandmarks()`, `getDeviationsForFrame()`, `getCurrentPhase()` utilities
+- `frontend/src/components/DualSkeletonCanvas.jsx`: canvas component rendering user skeleton (cyan solid), pro skeleton (gold dashed), deviation glow highlights with pulsing animation, angle-diff labels, phase name label — requestAnimationFrame loop, video-frame background via hidden `<video>` element
+- `frontend/src/components/SkeletonLegend.jsx`: compact SVG legend bar (cyan = your swing, gold dashed = pro, red circle = deviation)
+- `frontend/src/pages/DevOverlayTest.jsx`: dev-only test page at `/dev/overlay-test` with synthetic landmark data, frame scrubber, and skeleton toggle controls
+- `getOverlay(analysisId)` function in `frontend/src/lib/api.js`
+
+### Changed
+- `frontend/vite.config.js`: added `/uploads` proxy so local videos/keyframes load in dev without CORS issues
+- `frontend/src/App.jsx`: added `/dev/overlay-test` route (dev mode only, lazy-loaded)
 
 ---
 
