@@ -1,5 +1,22 @@
 # Changelog
 
+## Session status — 2026-03-27 end of session
+
+**Branch:** `feature/pro-reference-v2` — 154 tests passing, working tree clean
+
+**Completed this session:**
+- Task 3.1: ProReference DB model + Alembic migration + slug utility + migrate script
+- Task 3.2: Pro reference API (6 endpoints) + `process_pro_reference` RQ worker task
+
+**Next tasks (FEATURE_SPEC_V2.md):**
+- Task 3.3: Frontend pro reference library UI (upload form, library page, status polling)
+- Task 3.4: Wire existing analysis to use DB-backed pro references
+- Task 4.x: Deviation overlay backend
+- Task 5.x: Frontend comparison UI
+- Task 6.1: Integration
+
+---
+
 ## [2026-03-27] Pro reference upload pipeline
 
 ### Added
