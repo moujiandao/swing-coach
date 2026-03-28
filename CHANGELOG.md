@@ -1,5 +1,28 @@
 # Changelog
 
+## [2026-03-27] Pro reference upload pipeline
+
+### Added
+- Create `backend/app/routers/pro_references.py`: 6 endpoints - POST create (presigned upload URL), POST confirm (enqueue processing), GET list (filterable by stroke_type/status/include_builtin, sorted by player_name), GET detail, DELETE (403 for builtins, cleans up .npz + S3), POST reprocess
+- Create `backend/app/worker/pro_reference_tasks.py`: `process_pro_reference` RQ task - download video, extract frames, pose estimation, feature extraction, thumbnail generation (320x180 JPEG), .npz save (extends loader format with velocity and landmark arrays), DB record update
+- Add `upload_file(local_path, key, content_type)` and `delete_object(key)` to `backend/app/services/s3.py`
+- Register pro_references router in `backend/app/main.py`
+- Add `backend/tests/test_pro_reference_api.py`: 27 tests covering all endpoints and worker task orchestration (npz written to disk, failure marks status=failed)
+
+## [2026-03-27] ProReference DB model
+
+### Added
+- Add `ProReference` SQLAlchemy model to `backend/app/models.py`: UUID primary key, player_name/slug, stroke_type, video/thumbnail/npz S3 keys, status enum (pending/processing/ready/failed), frame metadata, is_builtin flag, metadata_json
+- Add `ProReferenceStatus` enum to `app/models.py`
+- Add `slugify(name)` utility to `app/models.py`: lowercase, hyphen-separated, handles special chars
+- Add Pydantic schemas: `ProReferenceCreate`, `ProReferenceResponse`, `ProReferenceListItem`
+- Add Alembic migration `a3c1e7d2f905_create_pro_references_table.py`: creates `pro_references` table with unique index on `player_slug`
+- Add `ProReferenceDB.get_by_id(session, ref_id)`: async DB-backed lookup by UUID, loads .npz from npz_path
+- Add `ProReferenceDB.list_available_from_db(session)`: async DB-backed list of ready references as `ProReferenceListItem` list
+- Deprecate `ProReferenceDB.list_available()` (file-scan path) with `DeprecationWarning`; kept as fallback
+- Add `scripts/migrate_static_references.py`: scans `backend/app/pro_references/data/*.npz`, creates ProReference DB records with status=ready/is_builtin=True; idempotent
+- Add `backend/tests/test_pro_reference_model.py`: 20 tests covering CRUD, slug uniqueness, DB-backed loader methods, migration script correctness and idempotency
+
 ## [2026-03-27]
 
 ### Fixed (Analyze Swing button — "Not Found" error on upload)
