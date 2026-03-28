@@ -4,13 +4,16 @@
  * Route: /dev/overlay-test
  * Only included in the router when import.meta.env.DEV is true.
  *
- * Renders DualSkeletonCanvas with synthetic landmark data so you can
- * visually verify skeleton rendering, deviation glows, and the phase label
- * without needing a real analysis record.
+ * Renders DualSkeletonCanvas + VideoScrubber + PhaseTimeline with synthetic
+ * data so you can verify rendering, playback, phase jumps, and tempo display
+ * without a real analysis record.
  */
 import { useState, useMemo } from 'react'
 import DualSkeletonCanvas from '../components/DualSkeletonCanvas'
 import SkeletonLegend from '../components/SkeletonLegend'
+import VideoScrubber from '../components/VideoScrubber'
+import PhaseTimeline from '../components/PhaseTimeline'
+import { useVideoPlayback } from '../hooks/useVideoPlayback'
 
 // BlazePose connections (same as backend LANDMARK_CONNECTIONS)
 const LANDMARK_CONNECTIONS = [
@@ -22,25 +25,19 @@ const LANDMARK_CONNECTIONS = [
 const NUM_FRAMES = 60
 const NUM_LANDMARKS = 33
 
-/**
- * Generate synthetic skeleton data: 33 landmarks arranged in a rough human
- * silhouette that animates across NUM_FRAMES using sine waves.
- *
- * Two versions are returned (user and pro) with a slight offset so both
- * skeletons are visible on the canvas.
- */
+// ---------------------------------------------------------------------------
+// Synthetic data generators
+// ---------------------------------------------------------------------------
+
 function generateSyntheticLandmarks(frameCount, offset = 0) {
-  // Rough normalized positions for all 33 BlazePose landmarks,
-  // giving a recognizable stick figure on screen.
   const baseX = [
-    0.50, 0.50, 0.52, 0.48, 0.54, 0.46, 0.55, 0.45, // 0-7 face
-    0.56, 0.44, 0.57, 0.43,                           // 8-11 ears/eyes/mouth
-    0.60, 0.40, 0.65, 0.35, 0.68, 0.32,               // 12-17 shoulder/elbow/wrist
-    0.62, 0.38, 0.63, 0.37,                           // 18-21 pinky/index
-    0.61, 0.39,                                        // 22-23 thumb/hip
-    0.58, 0.42, 0.56, 0.44, 0.57, 0.43,               // 24-29 hip/knee/ankle
-    0.56, 0.44, 0.57, 0.43,                           // 30-31 heel/foot
-    0.50,                                              // 32 nose fallback
+    0.50, 0.50, 0.52, 0.48, 0.54, 0.46, 0.55, 0.45,
+    0.56, 0.44, 0.57, 0.43,
+    0.60, 0.40, 0.65, 0.35, 0.68, 0.32,
+    0.62, 0.38, 0.63, 0.37,
+    0.61, 0.39,
+    0.58, 0.42, 0.56, 0.44, 0.57, 0.43,
+    0.56, 0.44, 0.57, 0.43, 0.50,
   ]
   const baseY = [
     0.10, 0.10, 0.11, 0.11, 0.10, 0.10, 0.12, 0.12,
@@ -55,7 +52,7 @@ function generateSyntheticLandmarks(frameCount, offset = 0) {
   const landmarks = []
   for (let f = 0; f < frameCount; f++) {
     const t = f / frameCount
-    const swing = Math.sin(t * Math.PI * 2) * 0.03 // gentle swing animation
+    const swing = Math.sin(t * Math.PI * 2) * 0.03
     const frame = []
     for (let i = 0; i < NUM_LANDMARKS; i++) {
       const bx = baseX[i] ?? 0.5
@@ -72,14 +69,12 @@ function generateSyntheticLandmarks(frameCount, offset = 0) {
 }
 
 function generateSyntheticDeviations(frameCount) {
-  // Sprinkle deviations at a few specific frames for visual testing
   const frames = [
     Math.floor(frameCount * 0.25),
     Math.floor(frameCount * 0.50),
     Math.floor(frameCount * 0.75),
   ]
   const severities = ['moderate', 'critical', 'minor']
-
   return frames.map((fi, i) => ({
     frame_index: fi,
     phase: 'forward_swing',
@@ -99,17 +94,21 @@ function generateSyntheticDeviations(frameCount) {
 
 function generateSyntheticPhaseBoundaries(frameCount) {
   const q = Math.floor(frameCount / 5)
+  // Include tempo_ratio so PhaseTimeline can render tempo badges
   return {
-    preparation:   { user_start: 0,       user_end: q - 1 },
-    backswing:     { user_start: q,        user_end: 2 * q - 1 },
-    forward_swing: { user_start: 2 * q,    user_end: 3 * q - 1 },
-    contact:       { user_start: 3 * q,    user_end: 4 * q - 1 },
-    follow_through:{ user_start: 4 * q,    user_end: frameCount - 1 },
+    preparation:    { user_start: 0,       user_end: q - 1,       user_duration_frames: q,     pro_duration_frames: q,       tempo_ratio: 1.0  },
+    backswing:      { user_start: q,        user_end: 2 * q - 1,   user_duration_frames: q,     pro_duration_frames: q - 2,   tempo_ratio: 1.2  },
+    forward_swing:  { user_start: 2 * q,    user_end: 3 * q - 1,   user_duration_frames: q,     pro_duration_frames: q + 2,   tempo_ratio: 0.85 },
+    contact:        { user_start: 3 * q,    user_end: 4 * q - 1,   user_duration_frames: q,     pro_duration_frames: q,       tempo_ratio: 1.0  },
+    follow_through: { user_start: 4 * q,    user_end: frameCount - 1, user_duration_frames: frameCount - 4 * q, pro_duration_frames: frameCount - 4 * q, tempo_ratio: 0.95 },
   }
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function DevOverlayTest() {
-  const [currentFrame, setCurrentFrame] = useState(0)
   const [showUser, setShowUser] = useState(true)
   const [showPro, setShowPro] = useState(true)
   const [showDeviations, setShowDeviations] = useState(true)
@@ -119,14 +118,24 @@ export default function DevOverlayTest() {
   const frameDeviations = useMemo(() => generateSyntheticDeviations(NUM_FRAMES), [])
   const phaseBoundaries = useMemo(() => generateSyntheticPhaseBoundaries(NUM_FRAMES), [])
 
+  const {
+    currentFrame,
+    isPlaying,
+    playbackSpeed,
+    setPlaybackSpeed,
+    togglePlayPause,
+    seekToFrame,
+    seekToPhase,
+    stepForward,
+    stepBackward,
+  } = useVideoPlayback({ totalFrames: NUM_FRAMES, fps: 30, phaseBoundaries })
+
   const currentDev = frameDeviations.find((d) => d.frame_index === currentFrame)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">
-          Overlay Canvas — Dev Test
-        </h1>
+        <h1 className="text-2xl font-bold text-white">Overlay Canvas — Dev Test</h1>
         <p className="text-sm text-gray-400 mt-1">
           Synthetic data &bull; No real video &bull; Dev-mode only
         </p>
@@ -152,54 +161,51 @@ export default function DevOverlayTest() {
         <SkeletonLegend />
       </div>
 
-      {/* Frame scrubber */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs text-gray-400">
-          <span>Frame</span>
-          <span className="font-mono text-white">{currentFrame} / {NUM_FRAMES - 1}</span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={NUM_FRAMES - 1}
-          value={currentFrame}
-          onChange={(e) => setCurrentFrame(Number(e.target.value))}
-          className="w-full accent-[#00D4FF]"
+      {/* Video scrubber + transport controls */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">
+        <VideoScrubber
+          totalFrames={NUM_FRAMES}
+          currentFrame={currentFrame}
+          onFrameChange={seekToFrame}
+          fps={30}
+          isPlaying={isPlaying}
+          onPlayPause={togglePlayPause}
+          onStepForward={stepForward}
+          onStepBackward={stepBackward}
+          phaseBoundaries={phaseBoundaries}
+          playbackSpeed={playbackSpeed}
+          onSpeedChange={setPlaybackSpeed}
+          onSeekToPhase={seekToPhase}
         />
       </div>
 
-      {/* Toggle controls */}
+      {/* Phase timeline */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">
+        <PhaseTimeline
+          totalFrames={NUM_FRAMES}
+          currentFrame={currentFrame}
+          phaseBoundaries={phaseBoundaries}
+          onSeekToPhase={seekToPhase}
+        />
+      </div>
+
+      {/* Skeleton toggles */}
       <div className="flex gap-4 text-sm">
         <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={showUser}
-            onChange={(e) => setShowUser(e.target.checked)}
-            className="accent-[#00D4FF]"
-          />
+          <input type="checkbox" checked={showUser} onChange={(e) => setShowUser(e.target.checked)} className="accent-[#00D4FF]" />
           <span className="text-[#00D4FF]">Your skeleton</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={showPro}
-            onChange={(e) => setShowPro(e.target.checked)}
-            className="accent-[#FFD700]"
-          />
+          <input type="checkbox" checked={showPro} onChange={(e) => setShowPro(e.target.checked)} className="accent-[#FFD700]" />
           <span className="text-[#FFD700]">Pro skeleton</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={showDeviations}
-            onChange={(e) => setShowDeviations(e.target.checked)}
-            className="accent-[#EF4444]"
-          />
+          <input type="checkbox" checked={showDeviations} onChange={(e) => setShowDeviations(e.target.checked)} className="accent-[#EF4444]" />
           <span className="text-[#EF4444]">Deviations</span>
         </label>
       </div>
 
-      {/* Frame deviation status */}
+      {/* Current frame info */}
       <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 text-sm">
         <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">
           Frame {currentFrame} — Deviation status
@@ -208,7 +214,10 @@ export default function DevOverlayTest() {
           <div>
             <span
               className="inline-block px-2 py-0.5 rounded text-xs font-semibold mr-2"
-              style={{ background: currentDev.severity === 'critical' ? '#7f1d1d' : currentDev.severity === 'moderate' ? '#78350f' : '#1e3a5f', color: currentDev.severity === 'critical' ? '#ef4444' : currentDev.severity === 'moderate' ? '#f59e0b' : '#3b82f6' }}
+              style={{
+                background: currentDev.severity === 'critical' ? '#7f1d1d' : currentDev.severity === 'moderate' ? '#78350f' : '#1e3a5f',
+                color: currentDev.severity === 'critical' ? '#ef4444' : currentDev.severity === 'moderate' ? '#f59e0b' : '#3b82f6',
+              }}
             >
               {currentDev.severity}
             </span>

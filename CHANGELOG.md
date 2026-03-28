@@ -12,7 +12,6 @@
 - Task 5.1: `DualSkeletonCanvas` component (video + dual skeleton + deviation glow + phase label) + `SkeletonLegend` + `src/lib/landmarks.js` utilities + `/dev/overlay-test` page with synthetic data
 
 **Next tasks (FEATURE_SPEC_V2.md):**
-- Task 5.2: Video scrubber and phase timeline
 - Task 5.3: Comparison view (side-by-side + overlay modes)
 - Task 5.4: Polish
 - Task 6.1: Integration
@@ -36,6 +35,18 @@
 - `GET /api/analysis/{id}` now includes `video_url` (presigned) and `keyframe_urls` (dict of phase_name → presigned URL)
 - `GET /api/analysis/{id}/overlay` now includes `video_url` and `keyframe_urls`; Cache-Control changed from `immutable` to `private, max-age=3600` since presigned URLs expire in 1 hour
 - `generate_presigned_download_url` local dev fallback now returns `/uploads/{key}` HTTP path instead of `file://` URI (browser-usable)
+
+## [2026-03-28] Task 5.2
+
+### Added
+- `frontend/src/hooks/useVideoPlayback.js`: rAF-based playback hook with `play/pause/seek/step/seekToPhase`, configurable speed (0.25x/0.5x/1x), frame looping
+- `frontend/src/components/VideoScrubber.jsx`: transport controls (play/pause, step, speed), phase-gradient scrubber track, phase quick-jump buttons, frame/time readout; exports `PHASE_COLORS` and `PHASE_ORDER` constants
+- `frontend/src/components/PhaseTimeline.jsx`: proportional phase segments with tempo badges (slower/faster/on-pace), current-frame cursor, clickable phase segments
+
+### Changed
+- `frontend/src/pages/DevOverlayTest.jsx`: replaced manual range input with `VideoScrubber` + `PhaseTimeline`, wired `useVideoPlayback` hook; synthetic phase boundaries now include `tempo_ratio` for timeline badges
+
+---
 
 ## [2026-03-28] Task 5.1
 
