@@ -10,6 +10,7 @@
 - Task 4.2: `GET /api/analysis/{id}/overlay` + `GET /api/pro-references/{id}/preview` endpoints + `LANDMARK_CONNECTIONS` constant + `fps` column on Analysis
 - Task 4.3: Keyframe extraction per phase + S3 upload + `keyframe_s3_keys` on Analysis + presigned `video_url`/`keyframe_urls` in analysis and overlay endpoints + local dev static file serving via `/uploads/`
 - Task 5.1: `DualSkeletonCanvas` component (video + dual skeleton + deviation glow + phase label) + `SkeletonLegend` + `src/lib/landmarks.js` utilities + `/dev/overlay-test` page with synthetic data
+- Task 5.2: `useVideoPlayback` hook (rAF-based, configurable speed) + `VideoScrubber` (phase-gradient track, transport controls, phase jump buttons) + `PhaseTimeline` (proportional segments, tempo badges, cursor line)
 
 **Next tasks (FEATURE_SPEC_V2.md):**
 - Task 5.3: Comparison view (side-by-side + overlay modes)
