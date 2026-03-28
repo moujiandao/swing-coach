@@ -1,5 +1,21 @@
 # Changelog
 
+## Session status — 2026-03-28 end of session
+
+**Branch:** `feature/pro-reference-v2` — 232 tests passing, working tree clean
+
+**Completed this session:**
+- Task 3.4: ProReferencePicker component + wire Upload page to DB-backed references + `pro_reference_id` FK on Analysis
+- Task 4.1: Phase alignment engine (`phase_aligner.py`) + deviation annotator (`deviation_annotator.py`) + 4 new overlay JSON columns on Analysis
+- Task 4.2: `GET /api/analysis/{id}/overlay` + `GET /api/pro-references/{id}/preview` endpoints + `LANDMARK_CONNECTIONS` constant + `fps` column on Analysis
+
+**Next tasks (FEATURE_SPEC_V2.md):**
+- Task 4.3: Annotated frame extraction for video overlay
+- Task 5.x: Frontend comparison UI (dual skeleton canvas, video scrubber, phase breakdown)
+- Task 6.1: Integration
+
+---
+
 ## Session status — 2026-03-27 end of session
 
 **Branch:** `feature/pro-reference-v2` — 154 tests passing, working tree clean
