@@ -44,6 +44,7 @@ export default function ComparisonView({ overlayData }) {
   const [showDeviations, setShowDeviations] = useState(true)
   const [panelOpen, setPanelOpen] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
+  const [alignSkeletons, setAlignSkeletons] = useState(true)
 
   // Canvas sizing via ResizeObserver
   const containerRef = useRef(null)
@@ -117,6 +118,10 @@ export default function ComparisonView({ overlayData }) {
         case 'd':
         case 'D':
           setShowDeviations((v) => !v)
+          break
+        case 'a':
+        case 'A':
+          setAlignSkeletons((v) => !v)
           break
         case 'm':
         case 'M':
@@ -200,6 +205,15 @@ export default function ComparisonView({ overlayData }) {
               />
               <span className="text-[#EF4444]">Deviations</span>
             </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={alignSkeletons}
+                onChange={(e) => setAlignSkeletons(e.target.checked)}
+                className="accent-[#22C55E]"
+              />
+              <span className="text-[#22C55E]">Align</span>
+            </label>
 
             {/* Help button */}
             <button
@@ -229,6 +243,7 @@ export default function ComparisonView({ overlayData }) {
               showUserSkeleton={showUser}
               showProSkeleton={showPro}
               showDeviations={showDeviations}
+              alignSkeletons={alignSkeletons}
               width={overlayWidth}
               height={overlayHeight}
             />
@@ -249,6 +264,7 @@ export default function ComparisonView({ overlayData }) {
                   showUserSkeleton={true}
                   showProSkeleton={false}
                   showDeviations={showDeviations}
+                  alignSkeletons={alignSkeletons}
                   width={sideWidth}
                   height={sideHeight}
                 />
@@ -269,6 +285,7 @@ export default function ComparisonView({ overlayData }) {
                   showUserSkeleton={false}
                   showProSkeleton={true}
                   showDeviations={false}
+                  alignSkeletons={alignSkeletons}
                   width={sideWidth}
                   height={sideHeight}
                 />

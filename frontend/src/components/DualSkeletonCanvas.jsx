@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react'
-import { transformLandmarks, getDeviationsForFrame, getCurrentPhase } from '../lib/landmarks'
+import { transformLandmarks, transformLandmarksAligned, getDeviationsForFrame, getCurrentPhase } from '../lib/landmarks'
 
 // ---------------------------------------------------------------------------
 // Color palette
@@ -155,6 +155,7 @@ export default function DualSkeletonCanvas({
   showUserSkeleton = true,
   showProSkeleton = true,
   showDeviations = true,
+  alignSkeletons = false,
   width = 640,
   height = 360,
 }) {
@@ -162,6 +163,7 @@ export default function DualSkeletonCanvas({
   const videoRef = useRef(null)
   const pulseRef = useRef(0)
   const rafRef = useRef(null)
+  const smoothedAlignRef = useRef(null)
 
   // Fade state: current rendered alpha for each skeleton (0–1)
   const userAlphaRef = useRef(showUserSkeleton ? 1 : 0)
@@ -189,8 +191,16 @@ export default function DualSkeletonCanvas({
     const frameDevs = getDeviationsForFrame(frameDeviations, currentFrame)
     const phaseName = getCurrentPhase(phaseBoundaries, currentFrame)
 
-    const userCoords = userLm ? transformLandmarks(userLm, width, height) : []
-    const proCoords  = proLm  ? transformLandmarks(proLm,  width, height) : []
+    let userCoords, proCoords
+    if (alignSkeletons && (userLm || proLm)) {
+      const aligned = transformLandmarksAligned(userLm, proLm, width, height, smoothedAlignRef)
+      userCoords = aligned.userCoords
+      proCoords = aligned.proCoords
+    } else {
+      smoothedAlignRef.current = null
+      userCoords = userLm ? transformLandmarks(userLm, width, height) : []
+      proCoords  = proLm  ? transformLandmarks(proLm,  width, height) : []
+    }
 
     // Advance fade values toward their targets
     const userTarget = showUserSkeleton ? 1 : 0
@@ -221,7 +231,7 @@ export default function DualSkeletonCanvas({
   }, [
     userLandmarks, proLandmarks, frameDeviations, landmarkConnections,
     phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
-    showDeviations, width, height, totalFrames,
+    showDeviations, alignSkeletons, width, height, totalFrames,
   ])
 
   useEffect(() => { renderRef.current = render }, [render])

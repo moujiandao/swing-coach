@@ -12,6 +12,7 @@ const SHORTCUTS = [
   { keys: 'S', desc: 'Toggle your skeleton' },
   { keys: 'P', desc: 'Toggle pro skeleton' },
   { keys: 'D', desc: 'Toggle deviations' },
+  { keys: 'A', desc: 'Toggle skeleton alignment' },
   { keys: 'M', desc: 'Switch Overlay / Side-by-Side mode' },
   { keys: '[', desc: 'Decrease playback speed' },
   { keys: ']', desc: 'Increase playback speed' },

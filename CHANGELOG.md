@@ -3,6 +3,9 @@
 ## [2026-04-01]
 
 ### Added
+- Spatial alignment for skeleton overlay: hip-centering + scale normalization so user and pro skeletons render at the same position and size regardless of camera framing
+- "Align" toggle checkbox in ComparisonView controls (default ON), keyboard shortcut `A`
+- Exponential smoothing on alignment params to prevent frame-to-frame jitter
 - Pro Library: video preview modal on card hover — clicking thumbnail opens fullscreen player with play/pause/scrub (native `<video>`); URL fetched on demand via new `GET /api/pro-references/{id}/video-url`
 - Pro Library: inline rename — pencil icon on card hover lets user edit player name in place; Enter/blur saves, Escape cancels; blocked for built-in references
 - Backend: `GET /api/pro-references/{id}/video-url` endpoint returns presigned S3 download URL
@@ -12,15 +15,15 @@
 ### Changed
 - Footer text updated from "Built by Brian • Powered by MediaPipe + Claude" to "Built for tennis players, built by tennis players"
 
----
-
 ### Fixed
+- Fix SIGTSTP (suspended process) in RQ worker: ffmpeg/ffprobe read from stdin in forked child, causing OS to stop the process. Added `stdin=subprocess.DEVNULL` to both subprocess calls in `frame_extractor.py`
+- Fix pro reference reprocess endpoint: stuck `processing` references can now be reprocessed (removed 409 block, added `is_builtin` guard instead)
+- Fix RQ job timeout: increased from 180s default to 600s for both analysis and pro reference pipelines
 - Fix pro reference video upload in local dev: modal was posting to `/api/upload/local/` (Analysis endpoint) instead of `/api/pro-references/local/` (ProReference endpoint), causing "Analysis not found" error
 - Add `POST /api/pro-references/local/{id}` endpoint for local dev multipart upload fallback
 
 ### Known Issues
 - RQ worker crashes with SIGABRT on macOS when MediaPipe runs in forked process. Workaround: start worker with `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run rq worker --with-scheduler`
-- Jannik Sinner pro reference upload in progress (status: processing), needs reprocess after worker restart with fork safety fix
 
 ## Session status — 2026-03-28 end of session (V2 complete)
 
