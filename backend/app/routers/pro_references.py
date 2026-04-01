@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -25,11 +25,12 @@ from app.models import (
     ProReferenceListItem,
     ProReferenceResponse,
     ProReferenceStatus,
+    ProReferenceUpdate,
     StrokeType,
     slugify,
 )
 from app.services.db import get_db
-from app.services.s3 import delete_object, generate_presigned_upload_url
+from app.services.s3 import delete_object, generate_presigned_download_url, generate_presigned_upload_url
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +277,96 @@ async def get_pro_reference_preview(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/pro-references/{id}/video-url
+# ---------------------------------------------------------------------------
+
+class VideoUrlResponse(BaseModel):
+    video_url: str
+
+
+@router.get("/{reference_id}/video-url", response_model=VideoUrlResponse)
+async def get_pro_reference_video_url(
+    reference_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> VideoUrlResponse:
+    """
+    Returns a presigned URL for streaming the original pro reference video.
+    Only available for references that have a video_s3_key set.
+    """
+    ref = await _get_or_404(db, reference_id)
+
+    if not ref.video_s3_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No video available for this reference",
+        )
+
+    video_url = generate_presigned_download_url(ref.video_s3_key)
+    return VideoUrlResponse(video_url=video_url)
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/pro-references/{id}  — rename
+# ---------------------------------------------------------------------------
+
+@router.patch("/{reference_id}", response_model=ProReferenceResponse)
+async def update_pro_reference(
+    reference_id: uuid.UUID,
+    body: ProReferenceUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> ProReferenceResponse:
+    """
+    Update the player_name of a pro reference. Blocked for built-in references.
+    """
+    ref = await _get_or_404(db, reference_id)
+
+    if ref.is_builtin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Built-in pro references cannot be renamed",
+        )
+
+    trimmed = body.player_name.strip()
+    if not trimmed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="player_name cannot be empty",
+        )
+
+    ref.player_name = trimmed
+    await db.flush()
+
+    logger.info("Pro reference renamed — id=%s new_name=%s", reference_id, trimmed)
+    return ProReferenceResponse.model_validate(ref)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/pro-references/local/{id}  — local dev upload fallback
+# ---------------------------------------------------------------------------
+
+@router.post("/local/{reference_id}", status_code=status.HTTP_200_OK)
+async def local_upload_pro_reference(
+    reference_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Local dev fallback: receives multipart video upload and writes it to the
+    uploads/ directory using the ProReference's video_s3_key.
+    Only used when S3_BUCKET is not configured (file:// presigned URL path).
+    """
+    ref = await _get_or_404(db, reference_id)
+
+    dest = Path("uploads") / ref.video_s3_key
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    content = await file.read()
+    dest.write_bytes(content)
+
+    logger.info("Local pro reference upload saved — id=%s path=%s", reference_id, dest)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # DELETE /api/pro-references/{id}
 # ---------------------------------------------------------------------------
 
@@ -334,10 +425,10 @@ async def reprocess_pro_reference(
     """
     ref = await _get_or_404(db, reference_id)
 
-    if ref.status == ProReferenceStatus.processing:
+    if ref.is_builtin:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Reference is already being processed",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Built-in pro references cannot be reprocessed",
         )
 
     # Delete stale .npz so the pipeline produces a fresh one
@@ -375,7 +466,7 @@ def _enqueue_pro_reference_job(reference_id: str) -> None:
         from app.config import get_settings
 
         q = Queue(connection=Redis.from_url(get_settings().redis_url))
-        q.enqueue(process_pro_reference, reference_id)
+        q.enqueue(process_pro_reference, reference_id, job_timeout=600)
         logger.info("Pro reference job enqueued — id=%s", reference_id)
     except Exception as exc:
         logger.warning(

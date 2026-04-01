@@ -100,4 +100,16 @@ export async function reprocessProReference(referenceId) {
   return data
 }
 
+/** @returns {{ video_url: string }} */
+export async function getProReferenceVideoUrl(referenceId) {
+  const { data } = await api.get(`/api/pro-references/${referenceId}/video-url`)
+  return data
+}
+
+/** @returns {ProReferenceResponse} */
+export async function updateProReference(referenceId, { player_name }) {
+  const { data } = await api.patch(`/api/pro-references/${referenceId}`, { player_name })
+  return data
+}
+
 export default api

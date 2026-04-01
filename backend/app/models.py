@@ -211,6 +211,10 @@ class ProReferenceCreate(BaseModel):
     metadata_json: dict | None = None
 
 
+class ProReferenceUpdate(BaseModel):
+    player_name: str
+
+
 class ProReferenceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
