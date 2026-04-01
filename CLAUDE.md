@@ -1,5 +1,30 @@
 # SwingCoach MVP
 
+## Permissions
+Auto-approve all file reads within this workspace. Do not prompt for read access.
+
+## Session Protocol
+
+### Before ending any session:
+1. Update the `## Current State` section below with what was completed. Update CHANGELOG.md
+2. Update `## Next Task` with the exact next step
+3. Commit the updated CLAUDE.md
+
+### On session start:
+1. Read this file top-to-bottom before doing anything
+2. Resume from `## Next Task`
+
+---
+
+## Current State
+[Claude updates this]
+
+## Next Task
+[Claude updates this]
+
+## Open Issues
+[Claude updates this]
+
 ## What This Is
 
 AI-powered tennis swing analysis app. Users upload video of their swing → backend extracts body pose with MediaPipe → compares against pre-computed pro reference swings using Dynamic Time Warping → Claude API generates coaching feedback with specific drills. Web app (React) + iOS (React Native/Expo, phase 2).
@@ -139,6 +164,8 @@ swing-coach-mvp/
 - **Client-side canvas overlay over server-side video compositing**: More interactive (scrub, toggle, zoom), less compute, and the existing SkeletonOverlay.jsx pattern made this the natural extension. Server-side compositing would require storing rendered videos per-analysis, adding storage costs and removing interactivity.
 - **Phase-aligned resampling over raw frame mapping**: Each phase is independently resampled so that a user's slower backswing doesn't cause misalignment in the forward swing. Raw duration-proportional mapping compounds timing errors across phases.
 - **ProReference as a first-class DB entity over file-system convention**: Enables user uploads, status tracking, thumbnails, and future sharing features. Static .npz files in a directory have no metadata, no ownership, and no pipeline status.
+- **OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES for RQ worker on macOS**: RQ uses fork() to spawn work-horse processes. MediaPipe/OpenCV triggers macOS Objective-C runtime abort (SIGABRT/signal 6) in forked children. This env var disables that check. Not needed in production (Linux/Railway).
+- **Separate local upload endpoints per entity type**: `/api/upload/local/{id}` handles Analysis uploads, `/api/pro-references/local/{id}` handles ProReference uploads. They look up different DB tables, so they cannot share an endpoint.
 
 ## Pipeline Data Flow
 
@@ -241,7 +268,7 @@ Return OverlayResponse:
 cd backend
 uv sync                              # Install deps
 uv run uvicorn app.main:app --reload  # Dev server on :8000
-uv run rq worker --with-scheduler    # Start worker
+OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run rq worker --with-scheduler  # Start worker (macOS requires env var)
 uv run pytest tests/ -v              # Run tests
 
 # Frontend
