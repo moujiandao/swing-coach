@@ -264,6 +264,10 @@ class ProReferenceListItem(BaseModel):
 # BlazePose landmark pairs that form the skeleton bones the frontend draws.
 # Each pair is [landmark_a, landmark_b].  All indices are < 33.
 LANDMARK_CONNECTIONS: list[list[int]] = [
+    [0, 7],     # nose → left ear
+    [0, 8],     # nose → right ear
+    [7, 11],    # left ear → left shoulder
+    [8, 12],    # right ear → right shoulder
     [11, 12],   # shoulders
     [11, 13],   # left shoulder → left elbow
     [13, 15],   # left elbow → left wrist

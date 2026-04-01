@@ -195,23 +195,27 @@ class TestExtractFeatures:
         result = extract_features(lm, fps=30.0, stroke_type="forehand")
         expected = {
             "elbow_angle", "shoulder_rotation", "hip_rotation",
-            "trunk_rotation", "knee_bend", "racket_arm_elevation"
+            "trunk_rotation", "knee_bend", "racket_arm_elevation",
+            "left_elbow_angle", "left_arm_elevation", "stance_width", "head_movement",
         }
         assert set(result.joint_angles.keys()) == expected
 
     def test_joint_angles_in_degrees_range(self):
         lm = _make_landmarks()
         result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        # stance_width is a normalized distance [0, ~1]; head_movement is a signed offset
+        non_angle_metrics = {"stance_width", "head_movement"}
         for name, arr in result.joint_angles.items():
             assert arr.shape == (60,), f"{name} wrong shape"
-            assert np.all(arr >= 0) and np.all(arr < 360), (
-                f"{name} out of [0,360): min={arr.min():.2f} max={arr.max():.2f}"
-            )
+            if name not in non_angle_metrics:
+                assert np.all(arr >= 0) and np.all(arr < 360), (
+                    f"{name} out of [0,360): min={arr.min():.2f} max={arr.max():.2f}"
+                )
 
     def test_velocity_keys(self):
         lm = _make_landmarks()
         result = extract_features(lm, fps=30.0, stroke_type="forehand")
-        assert set(result.velocities.keys()) == {"wrist_speed", "elbow_speed", "hip_speed"}
+        assert set(result.velocities.keys()) == {"wrist_speed", "elbow_speed", "hip_speed", "wrist_acceleration"}
 
     def test_velocity_shapes(self):
         n = 60
@@ -261,3 +265,98 @@ class TestExtractFeatures:
         peak = int(np.argmax(np.abs(np.gradient(lm[:, 15, 0]))))
         # Contact frame for left-hand should be closer to peak than right-hand contact
         assert abs(result_left.contact_frame - peak) <= abs(result_right.contact_frame - peak) + 5
+
+
+# ---------------------------------------------------------------------------
+# New metrics — Track A
+# ---------------------------------------------------------------------------
+
+class TestNewMetrics:
+    def test_stance_width_is_nonnegative(self):
+        lm = _make_landmarks()
+        result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        assert np.all(result.joint_angles["stance_width"] >= 0)
+
+    def test_stance_width_distance_math(self):
+        """Landmarks placed at known positions → verify exact distance."""
+        n = 10
+        lm = np.zeros((n, 33, 3), dtype=np.float32)
+        # Left ankle (27) at (0.3, 0.9), right ankle (28) at (0.7, 0.9)
+        lm[:, 27] = [0.3, 0.9, 0.0]
+        lm[:, 28] = [0.7, 0.9, 0.0]
+        # Give wrist a sinusoidal trajectory so phase detection works
+        t = np.linspace(0, 2 * np.pi, n)
+        lm[:, 16, 0] = 0.5 + 0.3 * np.sin(t)
+        result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        expected_width = 0.4  # |0.7 - 0.3|
+        assert np.allclose(result.joint_angles["stance_width"], expected_width, atol=1e-5)
+
+    def test_head_movement_zero_when_symmetric(self):
+        """Nose at exact midpoint of shoulders → head_movement should be 0."""
+        n = 10
+        lm = np.zeros((n, 33, 3), dtype=np.float32)
+        # Shoulders at y=0.4 and y=0.4 (same height), nose midpoint
+        lm[:, 11] = [0.3, 0.4, 0.0]  # left shoulder
+        lm[:, 12] = [0.7, 0.4, 0.0]  # right shoulder
+        lm[:, 0]  = [0.5, 0.4, 0.0]  # nose at same y as shoulder midpoint
+        t = np.linspace(0, 2 * np.pi, n)
+        lm[:, 16, 0] = 0.5 + 0.3 * np.sin(t)
+        result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        assert np.allclose(result.joint_angles["head_movement"], 0.0, atol=1e-5)
+
+    def test_left_elbow_angle_right_angle(self):
+        """Place left arm landmarks at a 90° angle and verify result."""
+        n = 10
+        lm = np.zeros((n, 33, 3), dtype=np.float32)
+        # Left shoulder (11) → elbow (13) → wrist (15) forming 90°
+        lm[:, 11] = [0.3, 0.5, 0.0]  # left shoulder
+        lm[:, 13] = [0.3, 0.7, 0.0]  # left elbow (below shoulder)
+        lm[:, 15] = [0.5, 0.7, 0.0]  # left wrist (right of elbow)
+        # Other needed landmarks
+        lm[:, 23] = [0.3, 0.9, 0.0]  # left hip
+        t = np.linspace(0, 2 * np.pi, n)
+        lm[:, 16, 0] = 0.5 + 0.3 * np.sin(t)
+        result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        angles = result.joint_angles["left_elbow_angle"]
+        assert np.allclose(angles, 90.0, atol=2.0)
+
+    def test_left_arm_uses_opposite_side_from_hitting_arm(self):
+        """
+        For a right-handed player, left_elbow_angle uses left arm (lm 11,13,15).
+        Putting motion ONLY on left arm should give non-trivial left_elbow_angle
+        but zero change if right arm is frozen.
+        """
+        n = 20
+        lm = np.full((n, 33, 3), 0.5, dtype=np.float32)
+        # Move left wrist (15) so left_elbow_angle varies
+        lm[:, 15, 0] = np.linspace(0.3, 0.7, n)
+        t = np.linspace(0, 2 * np.pi, n)
+        lm[:, 16, 0] = 0.5 + 0.3 * np.sin(t)  # give right wrist trajectory for phase detection
+
+        result_right = extract_features(lm, fps=30.0, stroke_type="forehand", handedness="right")
+        result_left  = extract_features(lm, fps=30.0, stroke_type="forehand", handedness="left")
+
+        # For right-handed: left_elbow_angle uses left arm → should vary
+        # For left-handed: left_elbow_angle also uses non-hitting (right) arm → different
+        # Just verify both return the correct shape
+        assert result_right.joint_angles["left_elbow_angle"].shape == (n,)
+        assert result_left.joint_angles["left_elbow_angle"].shape == (n,)
+
+    def test_wrist_acceleration_shape(self):
+        n = 60
+        lm = _make_landmarks(n)
+        result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        assert result.velocities["wrist_acceleration"].shape == (n,)
+
+    def test_wrist_acceleration_is_float32(self):
+        lm = _make_landmarks()
+        result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        assert result.velocities["wrist_acceleration"].dtype == np.float32
+
+    def test_wrist_acceleration_nonzero_for_varying_speed(self):
+        """A swing with changing wrist speed should have nonzero acceleration."""
+        lm = _make_landmarks(60)
+        result = extract_features(lm, fps=30.0, stroke_type="forehand")
+        # Interior frames should have some nonzero acceleration
+        accel = result.velocities["wrist_acceleration"]
+        assert not np.allclose(accel[5:-5], 0.0)

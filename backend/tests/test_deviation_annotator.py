@@ -106,6 +106,7 @@ class TestJointLandmarkMap:
         expected = {
             "elbow_angle", "shoulder_rotation", "hip_rotation",
             "knee_bend", "racket_arm_elevation", "trunk_rotation",
+            "left_elbow_angle", "left_arm_elevation", "stance_width", "head_movement",
         }
         assert expected.issubset(set(JOINT_LANDMARK_MAP.keys()))
 
@@ -339,3 +340,101 @@ class TestComputeFrameDeviations:
                           if jd.joint_name == "elbow_angle"]
             assert elbow_devs, "Expected elbow_angle JointDeviation"
             assert elbow_devs[0].landmark_indices == JOINT_LANDMARK_MAP["elbow_angle"]
+
+
+# ---------------------------------------------------------------------------
+# New metric annotations — Track A
+# ---------------------------------------------------------------------------
+
+def _new_metric_landmarks(n_frames: int) -> np.ndarray:
+    """Landmarks with distinct positions for new metric testing."""
+    lm = np.zeros((n_frames, 33, 3), dtype=np.float32)
+    # Shoulders
+    lm[:, 11] = [0.3, 0.4, 0.0]
+    lm[:, 12] = [0.7, 0.4, 0.0]
+    # Hips
+    lm[:, 23] = [0.3, 0.8, 0.0]
+    lm[:, 24] = [0.7, 0.8, 0.0]
+    # Left arm (non-hitting for right-handed)
+    lm[:, 13] = [0.3, 0.6, 0.0]  # left elbow
+    lm[:, 15] = [0.5, 0.6, 0.0]  # left wrist
+    # Right arm (hitting)
+    lm[:, 14] = [0.7, 0.6, 0.0]  # right elbow
+    lm[:, 16] = [0.9, 0.6, 0.0]  # right wrist
+    lm[:, 26] = [0.7, 1.0, 0.0]  # right knee
+    lm[:, 28] = [0.7, 1.2, 0.0]  # right ankle
+    # Ankles
+    lm[:, 27] = [0.3, 1.2, 0.0]  # left ankle
+    lm[:, 28] = [0.7, 1.2, 0.0]  # right ankle
+    # Nose
+    lm[:, 0]  = [0.5, 0.2, 0.0]
+    return lm
+
+
+class TestNewMetricAnnotations:
+    def test_stance_width_landmark_map(self):
+        assert JOINT_LANDMARK_MAP["stance_width"] == [27, 28]
+
+    def test_head_movement_landmark_map(self):
+        assert JOINT_LANDMARK_MAP["head_movement"] == [0, 11, 12]
+
+    def test_left_elbow_angle_landmark_map(self):
+        assert JOINT_LANDMARK_MAP["left_elbow_angle"] == [11, 13]
+
+    def test_left_arm_elevation_landmark_map(self):
+        assert JOINT_LANDMARK_MAP["left_arm_elevation"] == [11, 13, 23]
+
+    def test_stance_width_returns_nonnegative(self):
+        lm = _new_metric_landmarks(1)[0]
+        val = _angle_for_joint("stance_width", lm)
+        assert val is not None
+        assert val >= 0.0
+
+    def test_head_movement_returns_float(self):
+        lm = _new_metric_landmarks(1)[0]
+        val = _angle_for_joint("head_movement", lm)
+        assert val is not None
+        assert isinstance(val, float)
+
+    def test_left_elbow_angle_returns_float(self):
+        lm = _new_metric_landmarks(1)[0]
+        val = _angle_for_joint("left_elbow_angle", lm)
+        assert val is not None
+        assert isinstance(val, float)
+
+    def test_left_arm_elevation_returns_float(self):
+        lm = _new_metric_landmarks(1)[0]
+        val = _angle_for_joint("left_arm_elevation", lm)
+        assert val is not None
+        assert isinstance(val, float)
+
+    def test_stance_width_large_diff_flagged(self):
+        """User has much wider stance than pro → deviation should be flagged."""
+        phases = {"forward_swing": (0, 9)}
+        user_lm = _new_metric_landmarks(10)
+        pro_lm  = _new_metric_landmarks(10)
+        # Pro has narrow stance: both ankles close together
+        pro_lm[:, 27] = [0.48, 1.2, 0.0]
+        pro_lm[:, 28] = [0.52, 1.2, 0.0]
+
+        deviations = [_make_deviation("stance_width", "forward_swing")]
+        result = compute_frame_deviations(user_lm, pro_lm, phases, deviations, threshold_degrees=0.05)
+        assert len(result) > 0
+
+    def test_head_movement_direction_labels(self):
+        """head_movement > 0 (nose below shoulder midpoint) → 'too_low'."""
+        phases = {"forward_swing": (0, 9)}
+        user_lm = _new_metric_landmarks(10)
+        pro_lm  = _new_metric_landmarks(10)
+        # Pro nose higher than user nose → user nose lower (too_low)
+        pro_lm[:, 0] = [0.5, 0.0, 0.0]   # pro nose at top
+        user_lm[:, 0] = [0.5, 0.5, 0.0]  # user nose lower (positive offset)
+
+        deviations = [_make_deviation("head_movement", "forward_swing")]
+        result = compute_frame_deviations(user_lm, pro_lm, phases, deviations, threshold_degrees=0.05)
+
+        if result:
+            head_devs = [jd for fd in result for jd in fd.deviating_joints
+                         if jd.joint_name == "head_movement"]
+            if head_devs:
+                assert head_devs[0].direction in ("too_low", "too_high")

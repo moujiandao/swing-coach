@@ -207,9 +207,11 @@ def extract_features(
     if handedness == "left":
         hit = _L   # left-arm is hitting arm
         front = _R  # right side is front for left-handers
+        non_hit = _R
     else:
         hit = _R
         front = _L
+        non_hit = _L
 
     # Convenience: extract per-frame arrays for key joints
     def lm(idx: int) -> np.ndarray:
@@ -228,13 +230,23 @@ def extract_features(
     l_hip      = lm(_LEFT_HIP)
     r_hip      = lm(_RIGHT_HIP)
 
+    # Non-hitting arm joints
+    non_hit_shoulder = lm(non_hit["shoulder"])
+    non_hit_elbow    = lm(non_hit["elbow"])
+    non_hit_wrist    = lm(non_hit["wrist"])
+    non_hit_hip      = lm(non_hit["hip"])
+
     # --- Joint angles (degrees, per frame) ---
-    elbow_angle         = np.array([compute_angle(hit_shoulder[i], hit_elbow[i], hit_wrist[i])   for i in range(n)], dtype=np.float32)
-    knee_bend           = np.array([compute_angle(hit_hip[i],      hit_knee[i],  hit_ankle[i])   for i in range(n)], dtype=np.float32)
-    racket_arm_elevation= np.array([compute_angle(hit_elbow[i],    hit_shoulder[i], hit_hip[i])  for i in range(n)], dtype=np.float32)
-    shoulder_rotation   = np.array([_line_angle_deg(l_shoulder[i], r_shoulder[i])                for i in range(n)], dtype=np.float32)
-    hip_rotation        = np.array([_line_angle_deg(l_hip[i],      r_hip[i])                     for i in range(n)], dtype=np.float32)
+    elbow_angle         = np.array([compute_angle(hit_shoulder[i], hit_elbow[i], hit_wrist[i])          for i in range(n)], dtype=np.float32)
+    knee_bend           = np.array([compute_angle(hit_hip[i],      hit_knee[i],  hit_ankle[i])          for i in range(n)], dtype=np.float32)
+    racket_arm_elevation= np.array([compute_angle(hit_elbow[i],    hit_shoulder[i], hit_hip[i])         for i in range(n)], dtype=np.float32)
+    shoulder_rotation   = np.array([_line_angle_deg(l_shoulder[i], r_shoulder[i])                       for i in range(n)], dtype=np.float32)
+    hip_rotation        = np.array([_line_angle_deg(l_hip[i],      r_hip[i])                            for i in range(n)], dtype=np.float32)
     trunk_rotation      = (shoulder_rotation - hip_rotation) % 360.0
+    left_elbow_angle    = np.array([compute_angle(non_hit_shoulder[i], non_hit_elbow[i], non_hit_wrist[i]) for i in range(n)], dtype=np.float32)
+    left_arm_elevation  = np.array([compute_angle(non_hit_elbow[i], non_hit_shoulder[i], non_hit_hip[i])   for i in range(n)], dtype=np.float32)
+    stance_width        = np.sqrt((landmarks[:,27,0]-landmarks[:,28,0])**2 + (landmarks[:,27,1]-landmarks[:,28,1])**2).astype(np.float32)
+    head_movement       = (landmarks[:,0,1] - (landmarks[:,11,1]+landmarks[:,12,1])/2).astype(np.float32)
 
     joint_angles = {
         "elbow_angle":          elbow_angle,
@@ -243,6 +255,10 @@ def extract_features(
         "trunk_rotation":       trunk_rotation,
         "knee_bend":            knee_bend,
         "racket_arm_elevation": racket_arm_elevation,
+        "left_elbow_angle":     left_elbow_angle,
+        "left_arm_elevation":   left_arm_elevation,
+        "stance_width":         stance_width,
+        "head_movement":        head_movement,
     }
 
     # --- Velocities (smoothed speed per frame) ---
@@ -251,10 +267,20 @@ def extract_features(
     hip_mid      = (l_hip + r_hip) / 2.0
     hip_speed    = compute_velocity(hip_mid, fps)
 
+    # Wrist acceleration: first derivative of wrist_speed using same window as compute_velocity
+    _accel_window = min(7, n if n % 2 == 1 else n - 1)
+    _accel_window = max(_accel_window, 3)
+    _accel_polyorder = min(2, _accel_window - 1)
+    wrist_acceleration = savgol_filter(
+        wrist_speed, window_length=_accel_window, polyorder=_accel_polyorder,
+        deriv=1, delta=1.0 / fps,
+    ).astype(np.float32)
+
     velocities = {
-        "wrist_speed": wrist_speed,
-        "elbow_speed": elbow_speed,
-        "hip_speed":   hip_speed,
+        "wrist_speed":        wrist_speed,
+        "elbow_speed":        elbow_speed,
+        "hip_speed":          hip_speed,
+        "wrist_acceleration": wrist_acceleration,
     }
 
     # --- Phase detection ---

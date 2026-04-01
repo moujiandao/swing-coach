@@ -23,12 +23,22 @@ _SEVERITY_ORDER = ["critical", "moderate", "minor"]
 
 # Mapping: joint name → MediaPipe landmark indices to highlight on the skeleton
 JOINT_LANDMARK_MAP: dict[str, list[int]] = {
-    "elbow_angle":          [13, 14],       # left / right elbow
-    "shoulder_rotation":    [11, 12],       # left / right shoulder
-    "hip_rotation":         [23, 24],       # left / right hip
-    "knee_bend":            [25, 26],       # left / right knee
-    "racket_arm_elevation": [11, 12, 13, 14],  # shoulder + elbow (hitting side)
-    "trunk_rotation":       [11, 12, 23, 24],  # both shoulders + both hips
+    "elbow_angle":          [13, 14],           # left / right elbow
+    "shoulder_rotation":    [11, 12],           # left / right shoulder
+    "hip_rotation":         [23, 24],           # left / right hip
+    "knee_bend":            [25, 26],           # left / right knee
+    "racket_arm_elevation": [11, 12, 13, 14],   # shoulder + elbow (hitting side)
+    "trunk_rotation":       [11, 12, 23, 24],   # both shoulders + both hips
+    "left_elbow_angle":     [11, 13],           # left shoulder + left elbow
+    "left_arm_elevation":   [11, 13, 23],       # left shoulder + elbow + hip
+    "stance_width":         [27, 28],           # left + right ankle
+    "head_movement":        [0, 11, 12],        # nose + both shoulders
+}
+
+# Direction labels per metric — overrides "too_wide"/"too_narrow" where semantics differ
+_DIRECTION_LABELS: dict[str, tuple[str, str]] = {
+    "default":       ("too_wide", "too_narrow"),
+    "head_movement": ("too_low",  "too_high"),
 }
 
 # Default: assume right-handed player (same as feature_engine default)
@@ -98,6 +108,18 @@ def _angle_for_joint(joint: str, landmarks_frame: np.ndarray) -> float | None:
         shoulder = _line_angle_deg(lm[_L_SHOULDER], lm[_R_SHOULDER])
         hip      = _line_angle_deg(lm[_L_HIP],      lm[_R_HIP])
         return (shoulder - hip) % 360.0
+
+    # Non-hitting arm (assumes right-handed; left shoulder = 11, left elbow = 13, left wrist = 15)
+    if joint == "left_elbow_angle":
+        return compute_angle(lm[11], lm[13], lm[15])
+    if joint == "left_arm_elevation":
+        return compute_angle(lm[13], lm[11], lm[23])
+
+    # Distance/offset metrics — returned as scalar values compatible with diff_degrees field
+    if joint == "stance_width":
+        return float(np.sqrt((lm[27, 0] - lm[28, 0])**2 + (lm[27, 1] - lm[28, 1])**2))
+    if joint == "head_movement":
+        return float(lm[0, 1] - (lm[11, 1] + lm[12, 1]) / 2)
 
     return None
 
@@ -195,7 +217,8 @@ def compute_frame_deviations(
             if abs(diff) < threshold_degrees:
                 continue
 
-            direction = "too_wide" if diff > 0 else "too_narrow"
+            labels = _DIRECTION_LABELS.get(dev.joint, _DIRECTION_LABELS["default"])
+            direction = labels[0] if diff > 0 else labels[1]
             landmark_indices = JOINT_LANDMARK_MAP.get(dev.joint, [])
 
             joint_devs.append(JointDeviation(
