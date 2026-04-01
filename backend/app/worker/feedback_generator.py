@@ -171,6 +171,7 @@ async def generate_coaching_feedback(
     comparison: ComparisonResult,
     stroke_type: str,
     pro_reference_name: str,
+    critique_context: str | None = None,
 ) -> CoachingFeedback:
     """
     Call Claude API to generate structured coaching feedback from swing comparison data.
@@ -179,6 +180,8 @@ async def generate_coaching_feedback(
         comparison: Output of compare_swing() with scores and deviations.
         stroke_type: e.g. "forehand", "backhand_one"
         pro_reference_name: e.g. "federer" (used in the system prompt)
+        critique_context: Optional critique from LLM-as-judge to inject as a follow-up
+            message, requesting regeneration that addresses identified weaknesses.
 
     Returns:
         CoachingFeedback with summary, fixes, drills, and positive notes.
@@ -197,18 +200,30 @@ async def generate_coaching_feedback(
     user_msg = _build_user_message(comparison)
 
     logger.info(
-        "Requesting coaching feedback from Claude (overall_score=%.1f, deviations=%d)",
+        "Requesting coaching feedback from Claude (overall_score=%.1f, deviations=%d%s)",
         comparison.overall_score,
         len(comparison.deviations),
+        ", with critique context" if critique_context else "",
     )
 
-    # First attempt
+    messages: list[dict] = [{"role": "user", "content": user_msg}]
+
+    # If a critique was provided, get an initial response first, then inject the critique
+    if critique_context:
+        initial = await client.messages.create(
+            model=_MODEL, max_tokens=_MAX_TOKENS, temperature=_TEMPERATURE,
+            system=system, messages=messages,
+        )
+        messages.append({"role": "assistant", "content": initial.content[0].text})
+        messages.append({"role": "user", "content": critique_context})
+
+    # Main generation attempt
     response = await client.messages.create(
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
         temperature=_TEMPERATURE,
         system=system,
-        messages=[{"role": "user", "content": user_msg}],
+        messages=messages,
     )
     raw = response.content[0].text
 
@@ -224,7 +239,7 @@ async def generate_coaching_feedback(
         temperature=_TEMPERATURE,
         system=system,
         messages=[
-            {"role": "user", "content": user_msg},
+            *messages,
             {"role": "assistant", "content": raw},
             {
                 "role": "user",
