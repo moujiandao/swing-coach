@@ -30,6 +30,7 @@ from app.services.db import get_session
 from app.services.s3 import download_video, upload_file
 from app.worker.deviation_annotator import compute_frame_deviations
 from app.worker.dtw_comparator import compare_swing
+from app.worker.evals import run_pipeline_evals
 from app.worker.feature_engine import extract_features
 from app.worker.feedback_generator import generate_coaching_feedback
 from app.worker.frame_extractor import extract_frames
@@ -386,6 +387,26 @@ def process_analysis(analysis_id: str) -> None:
             coaching_dict = {"summary": "API key not configured.", "overall_assessment": "unknown",
                              "priority_fixes": [], "positive_notes": [], "drill_plan": []}
         logger.info("[%s] Feedback done (%.1fs)", analysis_id, time.perf_counter() - t0)
+
+        # 10.5. Run deterministic pipeline evals
+        try:
+            eval_result = run_pipeline_evals(
+                features=features,
+                comparison=comparison,
+                feedback=coaching_dict,
+                frame_deviations=frame_deviations_list,
+                frame_mapping=frame_mapping_list,
+                num_user_frames=pose_result.landmarks.shape[0],
+            )
+            coaching_dict["eval_passed"] = eval_result.passed
+            coaching_dict["eval_issues"] = eval_result.issues
+            logger.info(
+                "[%s] Pipeline eval: passed=%s score=%d/%d issues=%d",
+                analysis_id, eval_result.passed, eval_result.score, eval_result.total,
+                len(eval_result.issues),
+            )
+        except Exception as eval_exc:
+            logger.warning("[%s] Pipeline eval failed (non-fatal): %s", analysis_id, eval_exc)
 
         # 11. Serialize results for JSON storage
         pose_data_serializable = pose_result.landmarks.tolist()
