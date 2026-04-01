@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getHistory } from '../lib/api'
+import { getHistory, cancelAnalysis } from '../lib/api'
 import Spinner from '../components/Spinner'
 
 const STATUS_BADGE = {
@@ -44,18 +44,15 @@ function SkeletonCard() {
   )
 }
 
-function HistoryCard({ analysis, onClick }) {
+function HistoryCard({ analysis, onClick, onCancel }) {
   const { status, stroke_type, pro_reference, overall_score, created_at } = analysis
   const badgeClass = STATUS_BADGE[status] ?? STATUS_BADGE.pending
+  const cancellable = status === 'processing' || status === 'pending'
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left rounded-2xl border border-gray-800 bg-gray-900 p-5 hover:border-gray-600 hover:bg-gray-800/60 transition-colors"
-    >
+    <div className="w-full text-left rounded-2xl border border-gray-800 bg-gray-900 p-5 hover:border-gray-600 hover:bg-gray-800/60 transition-colors">
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
+        <button type="button" onClick={onClick} className="space-y-1 min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-white">{formatStroke(stroke_type)}</span>
             {pro_reference && (
@@ -63,7 +60,7 @@ function HistoryCard({ analysis, onClick }) {
             )}
           </div>
           <p className="text-xs text-gray-500">{formatDate(created_at)}</p>
-        </div>
+        </button>
 
         <div className="flex items-center gap-3 shrink-0">
           {overall_score != null && (
@@ -74,9 +71,18 @@ function HistoryCard({ analysis, onClick }) {
           <span className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${badgeClass}`}>
             {status}
           </span>
+          {cancellable && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onCancel(analysis.id) }}
+              className="rounded-lg border border-red-800 bg-red-900/30 px-2 py-0.5 text-xs font-medium text-red-400 hover:bg-red-900/60 transition-colors"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -92,6 +98,19 @@ export default function History() {
       .catch((err) => setError(err?.response?.data?.detail || err.message || 'Failed to load history.'))
       .finally(() => setIsLoading(false))
   }, [])
+
+  const handleCancel = async (analysisId) => {
+    try {
+      await cancelAnalysis(analysisId)
+      setAnalyses((prev) =>
+        prev.map((a) =>
+          a.id === analysisId ? { ...a, status: 'failed', error_message: 'Cancelled by user' } : a
+        )
+      )
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to cancel analysis')
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -136,6 +155,7 @@ export default function History() {
               key={a.id}
               analysis={a}
               onClick={() => navigate(`/analysis/${a.id}`)}
+              onCancel={handleCancel}
             />
           ))}
         </div>

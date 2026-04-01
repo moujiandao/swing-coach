@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useCallback } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { cancelAnalysis } from '../lib/api'
 import { useAnalysis } from '../hooks/useAnalysis'
 import { useOverlayData } from '../hooks/useOverlayData'
 import ProcessingState from '../components/ProcessingState'
@@ -58,7 +59,17 @@ function OverlayError({ message, onRetry }) {
 
 export default function Analysis() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { analysis, isLoading, error, isProcessing } = useAnalysis(id)
+
+  const handleCancel = useCallback(async () => {
+    try {
+      await cancelAnalysis(id)
+      navigate('/history')
+    } catch {
+      navigate('/history')
+    }
+  }, [id, navigate])
   const {
     overlayData,
     isLoading: overlayLoading,
@@ -91,7 +102,7 @@ export default function Analysis() {
   }
 
   // Still processing
-  if (isProcessing) return <ProcessingState />
+  if (isProcessing) return <ProcessingState onCancel={handleCancel} />
 
   // Failed status
   if (analysis?.status === 'failed') {

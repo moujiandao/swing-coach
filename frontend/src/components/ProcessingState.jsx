@@ -1,4 +1,4 @@
-export default function ProcessingState() {
+export default function ProcessingState({ onCancel }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       {/* Spinning ring */}
@@ -27,6 +27,16 @@ export default function ProcessingState() {
           ),
         )}
       </div>
+
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-8 rounded-xl border border-red-800 bg-red-900/30 px-5 py-2 text-sm font-medium text-red-400 hover:bg-red-900/60 transition-colors"
+        >
+          Cancel Analysis
+        </button>
+      )}
     </div>
   )
 }

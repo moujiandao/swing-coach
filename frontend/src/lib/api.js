@@ -49,6 +49,15 @@ export async function getOverlay(analysisId) {
 }
 
 /**
+ * Cancel a processing/pending analysis.
+ * @returns {{ analysis_id: string, status: string }}
+ */
+export async function cancelAnalysis(analysisId) {
+  const { data } = await api.post(`/api/analysis/${analysisId}/cancel`)
+  return data
+}
+
+/**
  * Fetch the user's analysis history.
  * @returns {AnalysisResponse[]}
  */

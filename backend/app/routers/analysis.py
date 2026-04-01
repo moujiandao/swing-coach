@@ -103,6 +103,32 @@ async def get_analysis_overlay(
     return response
 
 
+@router.post("/analysis/{analysis_id}/cancel", status_code=status.HTTP_200_OK)
+async def cancel_analysis(
+    analysis_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Cancel a processing analysis by marking it as failed."""
+    result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+    analysis = result.scalar_one_or_none()
+
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+
+    if analysis.status not in (AnalysisStatus.processing, AnalysisStatus.pending):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot cancel analysis in status '{analysis.status.value}'",
+        )
+
+    analysis.status = AnalysisStatus.failed
+    analysis.error_message = "Cancelled by user"
+    await db.flush()
+
+    logger.info("Analysis cancelled — id=%s", analysis_id)
+    return {"analysis_id": str(analysis_id), "status": "failed"}
+
+
 @router.get("/history", response_model=list[AnalysisResponse], status_code=status.HTTP_200_OK)
 async def get_history(
     limit: int = Query(default=20, ge=1, le=100),
