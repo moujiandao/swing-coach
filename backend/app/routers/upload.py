@@ -150,7 +150,7 @@ def _enqueue_analysis_job(analysis_id: str) -> None:
         from app.config import get_settings
 
         q = Queue(connection=Redis.from_url(get_settings().redis_url))
-        q.enqueue(process_analysis, analysis_id)
+        q.enqueue(process_analysis, analysis_id, job_timeout=600)
         logger.info("Job enqueued for analysis_id=%s", analysis_id)
     except Exception as exc:
         # Don't fail the HTTP response if Redis is unavailable in dev

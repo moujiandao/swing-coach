@@ -400,7 +400,8 @@ async def test_reprocess_enqueues_job(client, ready_reference):
     mock_enqueue.assert_called_once_with(str(ready_reference.id))
 
 
-async def test_reprocess_already_processing_returns_409(client, db_engine):
+async def test_reprocess_stuck_processing_is_allowed(client, db_engine):
+    """A reference stuck in 'processing' (e.g. worker crash) can be reprocessed."""
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     ref = ProReference(
         id=uuid.uuid4(), player_name="Processing Player", player_slug="processing-player-forehand",
@@ -411,8 +412,25 @@ async def test_reprocess_already_processing_returns_409(client, db_engine):
         session.add(ref)
         await session.commit()
 
+    with patch("app.routers.pro_references._enqueue_pro_reference_job"):
+        resp = await client.post(f"/api/pro-references/{ref.id}/reprocess")
+    assert resp.status_code == 200
+
+
+async def test_reprocess_builtin_returns_403(client, db_engine):
+    """Built-in references cannot be reprocessed."""
+    factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    ref = ProReference(
+        id=uuid.uuid4(), player_name="Builtin Player", player_slug="builtin-player-forehand",
+        stroke_type=StrokeType.forehand, status=ProReferenceStatus.ready,
+        is_builtin=True, created_at=datetime.now(timezone.utc),
+    )
+    async with factory() as session:
+        session.add(ref)
+        await session.commit()
+
     resp = await client.post(f"/api/pro-references/{ref.id}/reprocess")
-    assert resp.status_code == 409
+    assert resp.status_code == 403
 
 
 async def test_reprocess_unknown_id_returns_404(client):

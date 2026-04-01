@@ -48,7 +48,7 @@ def _probe_video(video_path: str) -> dict:
         "-select_streams", "v:0",
         video_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         raise RuntimeError(f"ffprobe failed on {video_path}: {result.stderr.strip()}")
 
@@ -158,7 +158,7 @@ def extract_frames(
     ]
 
     logger.debug("ffmpeg cmd: %s", " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         raise RuntimeError(
             f"ffmpeg frame extraction failed for {video_path}:\n{result.stderr.strip()}"

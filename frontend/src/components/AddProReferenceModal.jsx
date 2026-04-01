@@ -47,7 +47,7 @@ export default function AddProReferenceModal({ onClose, onSuccess }) {
         const formData = new FormData()
         formData.append('file', file)
         await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/upload/local/${reference_id}`,
+          `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/pro-references/local/${reference_id}`,
           formData,
           {
             headers: { 'Content-Type': 'multipart/form-data' },
