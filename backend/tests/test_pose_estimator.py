@@ -144,6 +144,8 @@ def test_detection_rate_partial(blank_frame_paths):
 
     assert r.frames_with_pose == 6
     assert r.detection_rate == pytest.approx(0.6)
+    # Trailing undetected frames (6-9) should be trimmed
+    assert r.frames_processed == 6
 
 
 def test_raises_when_detection_rate_below_threshold(blank_frame_paths):
@@ -220,13 +222,13 @@ def test_interpolation_edge_copy_before():
         np.testing.assert_allclose(out_lm[i], lm_known, atol=1e-6)
 
 
-def test_no_gaps_are_uninterpolated(blank_frame_paths):
+def test_small_gaps_are_interpolated_in_extract(blank_frame_paths):
     """
-    After extract_poses with some missing frames, no frame in landmarks
-    should be all-zeros (which would indicate an un-filled gap).
+    After extract_poses with small gaps (1 frame), no frame in landmarks
+    should be all-zeros since these gaps are within the max_gap limit.
     """
     n = len(blank_frame_paths)
-    # Frames 2 and 5 are missing; rest detected
+    # Frames 2 and 5 are missing; rest detected (single-frame gaps)
     results = [
         _make_pose_result(has_pose=(i not in {2, 5})) for i in range(n)
     ]
@@ -234,7 +236,7 @@ def test_no_gaps_are_uninterpolated(blank_frame_paths):
     with _patched_landmarker(results):
         r = extract_poses(blank_frame_paths)
 
-    for i in range(n):
+    for i in range(r.frames_processed):
         assert not np.all(r.landmarks[i] == 0), f"Frame {i} was not interpolated"
 
 
@@ -273,3 +275,121 @@ def test_single_frame_works(blank_frame_paths):
 
     assert r.landmarks.shape == (1, N_LANDMARKS, 3)
     assert r.detection_rate == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Trimming
+# ---------------------------------------------------------------------------
+
+
+def test_trims_leading_undetected_frames(blank_frame_paths):
+    """First 3 frames undetected → trimmed, result starts at frame 3."""
+    n = len(blank_frame_paths)
+    # Frames 0-2 undetected, 3-9 detected
+    results = [_make_pose_result(has_pose=(i >= 3)) for i in range(n)]
+
+    with _patched_landmarker(results):
+        r = extract_poses(blank_frame_paths)
+
+    assert r.frames_processed == 7  # frames 3-9
+    assert r.landmarks.shape[0] == 7
+
+
+def test_trims_trailing_undetected_frames(blank_frame_paths):
+    """Last 4 frames undetected → trimmed."""
+    n = len(blank_frame_paths)
+    # Frames 0-5 detected, 6-9 undetected
+    results = [_make_pose_result(has_pose=(i < 6)) for i in range(n)]
+
+    with _patched_landmarker(results):
+        r = extract_poses(blank_frame_paths)
+
+    assert r.frames_processed == 6  # frames 0-5
+
+
+def test_trims_both_ends(blank_frame_paths):
+    """Leading and trailing undetected frames both trimmed."""
+    n = len(blank_frame_paths)
+    # Frames 2-7 detected, 0-1 and 8-9 undetected
+    results = [_make_pose_result(has_pose=(2 <= i <= 7)) for i in range(n)]
+
+    with _patched_landmarker(results):
+        r = extract_poses(blank_frame_paths)
+
+    assert r.frames_processed == 6  # frames 2-7
+    assert r.frames_with_pose == 6
+
+
+# ---------------------------------------------------------------------------
+# Detection mask
+# ---------------------------------------------------------------------------
+
+
+def test_detection_mask_all_detected(blank_frame_paths):
+    results = [_make_pose_result(has_pose=True)] * len(blank_frame_paths)
+
+    with _patched_landmarker(results):
+        r = extract_poses(blank_frame_paths)
+
+    assert r.detection_mask.dtype == bool
+    assert np.all(r.detection_mask)
+
+
+def test_detection_mask_partial(blank_frame_paths):
+    """Frames 2 and 5 are undetected (within trimmed range)."""
+    n = len(blank_frame_paths)
+    results = [_make_pose_result(has_pose=(i not in {2, 5})) for i in range(n)]
+
+    with _patched_landmarker(results):
+        r = extract_poses(blank_frame_paths)
+
+    assert r.detection_mask[0] == True
+    assert r.detection_mask[2] == False
+    assert r.detection_mask[5] == False
+
+
+# ---------------------------------------------------------------------------
+# Gap capping
+# ---------------------------------------------------------------------------
+
+
+def test_large_gap_leaves_zeros():
+    """Gap of 8 frames (> max_gap=5) should leave landmarks as zeros."""
+    n_frames = 12
+
+    lm_start = np.full((N_LANDMARKS, 3), 0.5, dtype=np.float32)
+    lm_end = np.full((N_LANDMARKS, 3), 0.8, dtype=np.float32)
+    vis_start = np.full(N_LANDMARKS, 0.9, dtype=np.float32)
+    vis_end = np.full(N_LANDMARKS, 0.9, dtype=np.float32)
+
+    # Detected at frame 0 and frame 9 (gap of 8 frames in between)
+    raw_lm = [lm_start] + [None] * 8 + [lm_end, None, None]
+    raw_vis = [vis_start] + [None] * 8 + [vis_end, None, None]
+    detected = {0, 9}
+
+    out_lm, out_vis = _interpolate_missing(raw_lm, raw_vis, detected, n_frames, max_gap=5)
+
+    # Frames 1-8 should be zeros (gap too large)
+    for i in range(1, 9):
+        assert np.all(out_lm[i] == 0), f"Frame {i} should be zeros (large gap)"
+        assert np.all(out_vis[i] == 0), f"Frame {i} visibility should be zeros"
+
+
+def test_small_gap_is_interpolated():
+    """Gap of 3 frames (<= max_gap=5) should be interpolated normally."""
+    n_frames = 6
+
+    lm_start = np.zeros((N_LANDMARKS, 3), dtype=np.float32)
+    lm_end = np.ones((N_LANDMARKS, 3), dtype=np.float32)
+    vis_start = np.zeros(N_LANDMARKS, dtype=np.float32)
+    vis_end = np.ones(N_LANDMARKS, dtype=np.float32)
+
+    raw_lm = [lm_start, None, None, None, lm_end, None]
+    raw_vis = [vis_start, None, None, None, vis_end, None]
+    detected = {0, 4}
+
+    out_lm, out_vis = _interpolate_missing(raw_lm, raw_vis, detected, n_frames, max_gap=5)
+
+    # Frame 2 should be midpoint (interpolated)
+    expected_mid = 0.5 * lm_start + 0.5 * lm_end
+    np.testing.assert_allclose(out_lm[2], expected_mid, atol=1e-6)

@@ -101,6 +101,8 @@ class Analysis(Base):
     fps: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Keyframe S3 keys per phase — populated by worker after analysis completes
     keyframe_s3_keys: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Per-frame boolean: True where MediaPipe actually detected a pose
+    detection_mask: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -292,6 +294,8 @@ class OverlayResponse(BaseModel):
     phase_boundaries: dict         # phase name → PhaseBoundary dict
     fps: float                     # video frame rate for playback timing
     landmark_connections: list[list[int]]  # bone pairs for skeleton drawing
+    # Per-frame boolean: True where pose was actually detected (vs interpolated)
+    detection_mask: list[bool] | None = None
     # Presigned URLs generated at request time for video playback
     video_url: str | None = None
     keyframe_urls: dict | None = None

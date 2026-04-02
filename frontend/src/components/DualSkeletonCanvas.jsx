@@ -156,6 +156,7 @@ export default function DualSkeletonCanvas({
   showProSkeleton = true,
   showDeviations = true,
   alignSkeletons = false,
+  detectionMask = null,
   width = 640,
   height = 360,
 }) {
@@ -186,7 +187,10 @@ export default function DualSkeletonCanvas({
       ctx.drawImage(video, 0, 0, width, height)
     }
 
-    const userLm   = userLandmarks?.[currentFrame]
+    // Skip user skeleton on frames where pose was not detected (interpolated
+    // data from large gaps produces garbage landmarks).
+    const frameDetected = !detectionMask || detectionMask[currentFrame] !== false
+    const userLm   = frameDetected ? userLandmarks?.[currentFrame] : null
     const proLm    = proLandmarks?.[currentFrame]
     const frameDevs = getDeviationsForFrame(frameDeviations, currentFrame)
     const phaseName = getCurrentPhase(phaseBoundaries, currentFrame)
@@ -231,7 +235,7 @@ export default function DualSkeletonCanvas({
   }, [
     userLandmarks, proLandmarks, frameDeviations, landmarkConnections,
     phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
-    showDeviations, alignSkeletons, width, height, totalFrames,
+    showDeviations, alignSkeletons, detectionMask, width, height, totalFrames,
   ])
 
   useEffect(() => { renderRef.current = render }, [render])

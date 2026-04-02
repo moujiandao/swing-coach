@@ -93,6 +93,7 @@ async def get_analysis_overlay(
         phase_boundaries=analysis.phase_boundaries or {},
         fps=analysis.fps or 30.0,
         landmark_connections=LANDMARK_CONNECTIONS,
+        detection_mask=analysis.detection_mask,
         video_url=generate_presigned_download_url(analysis.video_s3_key),
         keyframe_urls=_build_keyframe_urls(analysis.keyframe_s3_keys),
     )

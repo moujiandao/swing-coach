@@ -6,8 +6,14 @@
 - `pose_estimator.py`: Downscale high-res frames (>1080px) before MediaPipe detection — fixes false rejection of valid videos where person detector fails on 4K input
 - `pose_estimator.py`: Lower minimum detection rate threshold from 50% to 15% — interpolation already fills gaps, so fewer detections still produce usable landmarks
 - `config.py`: Lower default MediaPipe confidence from 0.5 to 0.1 — wide-angle court shots have small persons that need lower confidence for detection (60% detection rate vs 1% at 0.5)
+- `pose_estimator.py`: Trim leading/trailing undetected frames — removes idle video before/after the swing
+- `pose_estimator.py`: Cap interpolation gaps at 5 frames — large gaps leave zero-visibility instead of garbage landmarks
+- `DualSkeletonCanvas.jsx`: Hide user skeleton on undetected frames using detection mask
 
 ### Added
+- `pose_estimator.py`: `detection_mask` field on `PoseEstimationResult` — boolean array distinguishing real detections from interpolated frames
+- `models.py`: `detection_mask` JSON column on Analysis model + `OverlayResponse` schema
+- Alembic migration `g2d3e5f6a789` for `detection_mask` column
 - `feature_engine.py`: 5 new pipeline metrics — `left_elbow_angle`, `left_arm_elevation`, `stance_width`, `head_movement` (joint_angles), `wrist_acceleration` (velocities)
 - `deviation_annotator.py`: 4 new entries in `JOINT_LANDMARK_MAP` + per-metric direction labels (`head_movement` uses "too_low"/"too_high")
 - `models.py`: 4 head skeleton bone connections (nose, ears, shoulders) in `LANDMARK_CONNECTIONS`

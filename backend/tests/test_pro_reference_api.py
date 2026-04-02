@@ -461,6 +461,7 @@ def _make_mock_pose_result(n_frames: int):
     return PoseEstimationResult(
         landmarks=landmarks,
         visibility=visibility,
+        detection_mask=np.ones(n_frames, dtype=bool),
         frames_processed=n_frames,
         frames_with_pose=n_frames,
         detection_rate=1.0,

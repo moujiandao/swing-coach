@@ -34,6 +34,7 @@ export default function ComparisonView({ overlayData }) {
     phase_boundaries,
     fps,
     landmark_connections,
+    detection_mask,
     video_url,
   } = overlayData
 
@@ -256,6 +257,7 @@ export default function ComparisonView({ overlayData }) {
               showProSkeleton={showPro}
               showDeviations={showDeviations}
               alignSkeletons={alignSkeletons}
+              detectionMask={detection_mask}
               width={overlayWidth}
               height={overlayHeight}
             />
@@ -277,6 +279,7 @@ export default function ComparisonView({ overlayData }) {
                   showProSkeleton={false}
                   showDeviations={showDeviations}
                   alignSkeletons={alignSkeletons}
+                  detectionMask={detection_mask}
                   width={sideWidth}
                   height={sideHeight}
                 />

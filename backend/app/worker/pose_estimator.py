@@ -93,6 +93,7 @@ _MAX_FRAME_DIMENSION = 1080
 class PoseEstimationResult:
     landmarks: np.ndarray    # (num_frames, 33, 3)  — normalized x, y, z
     visibility: np.ndarray   # (num_frames, 33)     — per-landmark confidence
+    detection_mask: np.ndarray  # (num_frames,) bool — True where pose was actually detected
     frames_processed: int
     frames_with_pose: int    # frames where a person was detected
     detection_rate: float    # frames_with_pose / frames_processed
@@ -124,10 +125,14 @@ def _interpolate_missing(
     raw_visibility: list[np.ndarray | None],
     detected: set[int],
     n_frames: int,
+    max_gap: int = 5,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Fill frames where pose was not detected via linear interpolation between
     neighboring detected frames. Edge frames copy the nearest detection.
+
+    Gaps larger than *max_gap* frames are left as zeros (landmarks and
+    visibility) so the frontend can hide the skeleton on those frames.
     """
     out_lm = np.zeros((n_frames, N_LANDMARKS, 3), dtype=np.float32)
     out_vis = np.zeros((n_frames, N_LANDMARKS), dtype=np.float32)
@@ -150,6 +155,10 @@ def _interpolate_missing(
         next_idx = next((f for f in sorted_detected if f > i), None)
 
         if prev_idx is not None and next_idx is not None:
+            gap = next_idx - prev_idx - 1
+            if gap > max_gap:
+                # Gap too large - leave as zeros (low confidence)
+                continue
             t = (i - prev_idx) / (next_idx - prev_idx)
             out_lm[i] = (1.0 - t) * out_lm[prev_idx] + t * out_lm[next_idx]
             out_vis[i] = (1.0 - t) * out_vis[prev_idx] + t * out_vis[next_idx]
@@ -246,35 +255,57 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
                 raw_landmarks.append(None)
                 raw_visibility.append(None)
 
-    frames_processed = len(frame_paths)
+    total_frames = len(frame_paths)
     frames_with_pose = len(detected)
-    detection_rate = frames_with_pose / frames_processed
+    detection_rate = frames_with_pose / total_frames if total_frames else 0.0
 
     logger.info(
         "Pose detection: %d/%d frames (%.0f%%)",
-        frames_with_pose, frames_processed, detection_rate * 100,
+        frames_with_pose, total_frames, detection_rate * 100,
     )
 
     min_rate = settings.pose_min_detection_rate
     if detection_rate < min_rate:
-        failed_indices = sorted(set(range(frames_processed)) - detected)
+        failed_indices = sorted(set(range(total_frames)) - detected)
         logger.debug(
             "Failed frame indices (first 20): %s", failed_indices[:20],
         )
         raise ValueError(
             f"Pose detection rate {detection_rate:.1%} is below the "
             f"{min_rate:.0%} threshold "
-            f"({frames_with_pose}/{frames_processed} frames detected). "
+            f"({frames_with_pose}/{total_frames} frames detected). "
             "Ensure the person is clearly visible throughout the video."
         )
+
+    # Trim leading/trailing undetected frames to the active detection window.
+    first_det = min(detected)
+    last_det = max(detected)
+    trim_lead = first_det
+    trim_trail = total_frames - 1 - last_det
+    if trim_lead > 0 or trim_trail > 0:
+        raw_landmarks = raw_landmarks[first_det : last_det + 1]
+        raw_visibility = raw_visibility[first_det : last_det + 1]
+        detected = {d - first_det for d in detected}
+        logger.info(
+            "Trimmed %d leading and %d trailing undetected frames",
+            trim_lead, trim_trail,
+        )
+
+    frames_processed = len(raw_landmarks)
 
     landmarks_arr, visibility_arr = _interpolate_missing(
         raw_landmarks, raw_visibility, detected, frames_processed
     )
 
+    # Build detection mask: True for frames with real detections.
+    detection_mask = np.zeros(frames_processed, dtype=bool)
+    for d in detected:
+        detection_mask[d] = True
+
     return PoseEstimationResult(
         landmarks=landmarks_arr,
         visibility=visibility_arr,
+        detection_mask=detection_mask,
         frames_processed=frames_processed,
         frames_with_pose=frames_with_pose,
         detection_rate=detection_rate,

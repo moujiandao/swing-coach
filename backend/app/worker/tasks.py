@@ -130,6 +130,7 @@ async def _write_results(
     phase_boundaries: dict | None = None,
     fps: float | None = None,
     keyframe_s3_keys: dict | None = None,
+    detection_mask: list | None = None,
 ) -> None:
     async with get_session() as session:
         result = await session.execute(
@@ -149,6 +150,7 @@ async def _write_results(
         analysis.phase_boundaries = phase_boundaries
         analysis.fps = fps
         analysis.keyframe_s3_keys = keyframe_s3_keys
+        analysis.detection_mask = detection_mask
         analysis.completed_at = datetime.now(timezone.utc)
         analysis.processing_time_ms = processing_time_ms
 
@@ -409,6 +411,7 @@ def process_analysis(analysis_id: str) -> None:
             logger.warning("[%s] Pipeline eval failed (non-fatal): %s", analysis_id, eval_exc)
 
         # 11. Serialize results for JSON storage
+        detection_mask_list = pose_result.detection_mask.tolist()
         pose_data_serializable = pose_result.landmarks.tolist()
         deviations_serializable = [asdict(d) for d in comparison.deviations]
 
@@ -430,6 +433,7 @@ def process_analysis(analysis_id: str) -> None:
             phase_boundaries=phase_boundaries_dict,
             fps=fps,
             keyframe_s3_keys=keyframe_s3_keys,
+            detection_mask=detection_mask_list,
         ))
 
         logger.info(
