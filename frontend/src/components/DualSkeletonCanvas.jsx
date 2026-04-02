@@ -164,9 +164,6 @@ export default function DualSkeletonCanvas({
   const pulseRef = useRef(0)
   const rafRef = useRef(null)
   const smoothedAlignRef = useRef(null)
-  // Last successfully decoded video frame — used as fallback during seeks to
-  // avoid the canvas flashing black while readyState temporarily drops below 2.
-  const lastFrameCanvasRef = useRef(null)
 
   // Fade state: current rendered alpha for each skeleton (0–1)
   const userAlphaRef = useRef(showUserSkeleton ? 1 : 0)
@@ -187,18 +184,6 @@ export default function DualSkeletonCanvas({
     const video = videoRef.current
     if (video && video.readyState >= 2) {
       ctx.drawImage(video, 0, 0, width, height)
-      // Cache this frame so we can show it during the next seek
-      if (!lastFrameCanvasRef.current ||
-          lastFrameCanvasRef.current.width !== width ||
-          lastFrameCanvasRef.current.height !== height) {
-        const offscreen = document.createElement('canvas')
-        offscreen.width = width
-        offscreen.height = height
-        lastFrameCanvasRef.current = offscreen
-      }
-      lastFrameCanvasRef.current.getContext('2d').drawImage(video, 0, 0, width, height)
-    } else if (lastFrameCanvasRef.current) {
-      ctx.drawImage(lastFrameCanvasRef.current, 0, 0, width, height)
     }
 
     const userLm   = userLandmarks?.[currentFrame]
