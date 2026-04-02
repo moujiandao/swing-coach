@@ -7,6 +7,7 @@ import DeviationTimeline from './DeviationTimeline'
 import FrameDeviationPanel from './FrameDeviationPanel'
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp'
 import { useVideoPlayback } from '../hooks/useVideoPlayback'
+import { getStanceWidthDeviation } from '../lib/landmarks'
 
 const ASPECT_RATIO = 9 / 16
 
@@ -230,6 +231,17 @@ export default function ComparisonView({ overlayData }) {
 
         {/* ---- Canvas area (container measured here for ResizeObserver) ---- */}
         <div ref={containerRef} className="w-full">
+          {(() => {
+            const stanceWidthDev = getStanceWidthDeviation(frame_deviations, currentFrame)
+            return stanceWidthDev != null ? (
+              <div className="text-xs text-gray-400 mb-1 font-mono">
+                Stance:{' '}
+                <span className={stanceWidthDev > 0 ? 'text-amber-400' : 'text-green-400'}>
+                  {stanceWidthDev > 0 ? '+' : ''}{stanceWidthDev.toFixed(3)} vs pro
+                </span>
+              </div>
+            ) : null
+          })()}
           {effectiveMode === 'overlay' ? (
             <DualSkeletonCanvas
               videoSrc={video_url || null}

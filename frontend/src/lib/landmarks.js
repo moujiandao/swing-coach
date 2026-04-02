@@ -131,6 +131,25 @@ export function getDeviationsForFrame(frameDeviations, frameIndex) {
 }
 
 /**
+ * Get the stance width deviation value for a specific frame.
+ * Returns the diff_degrees value (normalized distance diff: user - pro)
+ * for the "stance_width" joint, or null if no stance deviation on that frame.
+ *
+ * @param {Object[]} frameDeviations  Array from the overlay API response
+ * @param {number} frameIndex
+ * @returns {number|null}
+ */
+export function getStanceWidthDeviation(frameDeviations, frameIndex) {
+  if (!frameDeviations?.length) return null
+  for (const fd of frameDeviations) {
+    if (fd.frame_index !== frameIndex) continue
+    const stanceDev = fd.deviating_joints?.find((jd) => jd.joint_name === 'stance_width')
+    if (stanceDev != null) return stanceDev.diff_degrees
+  }
+  return null
+}
+
+/**
  * Determine which phase name the given frame falls in.
  *
  * phaseBoundaries shape:  { phase_name: { user_start, user_end, ... } }

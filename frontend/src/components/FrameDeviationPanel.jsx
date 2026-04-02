@@ -2,8 +2,17 @@
  * FrameDeviationPanel
  *
  * Collapsible panel showing real-time deviation data for the current frame.
- * Updates live as the user scrubs through frames.
+ * Updates live as the user scrubs through frames. Joints are grouped by body region.
  */
+
+// Body region grouping — order determines display order
+const BODY_REGIONS = [
+  { label: 'Hitting Arm',      joints: ['elbow_angle', 'racket_arm_elevation'] },
+  { label: 'Non-Hitting Arm',  joints: ['left_elbow_angle', 'left_arm_elevation'] },
+  { label: 'Torso',            joints: ['shoulder_rotation', 'hip_rotation', 'trunk_rotation'] },
+  { label: 'Legs & Stance',    joints: ['knee_bend', 'stance_width'] },
+  { label: 'Head',             joints: ['head_movement'] },
+]
 
 const SEVERITY_STYLE = {
   critical: { bg: '#7f1d1d', text: '#ef4444' },
@@ -62,6 +71,16 @@ function JointRow({ jointDev, severity }) {
 export default function FrameDeviationPanel({ frameDeviations, currentFrame, isOpen, onToggle }) {
   const frameDevs = (frameDeviations ?? []).filter((d) => d.frame_index === currentFrame)
 
+  // Build a flat lookup: joint_name → { jointDev, severity }
+  const activeJoints = {}
+  for (const fd of frameDevs) {
+    for (const jd of fd.deviating_joints ?? []) {
+      activeJoints[jd.joint_name] = { jointDev: jd, severity: fd.severity }
+    }
+  }
+
+  const totalDeviations = Object.keys(activeJoints).length
+
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900">
       {/* Header / toggle */}
@@ -74,10 +93,9 @@ export default function FrameDeviationPanel({ frameDeviations, currentFrame, isO
       >
         <span>
           Frame Analysis
-          {frameDevs.length > 0 && (
+          {totalDeviations > 0 && (
             <span className="ml-2 text-[10px] font-bold text-red-400">
-              {frameDevs.reduce((sum, d) => sum + (d.deviating_joints?.length ?? 0), 0)} deviation
-              {frameDevs.reduce((sum, d) => sum + (d.deviating_joints?.length ?? 0), 0) !== 1 ? 's' : ''}
+              {totalDeviations} deviation{totalDeviations !== 1 ? 's' : ''}
             </span>
           )}
         </span>
@@ -85,18 +103,30 @@ export default function FrameDeviationPanel({ frameDeviations, currentFrame, isO
       </button>
 
       {isOpen && (
-        <div className="px-4 pb-4 space-y-2">
-          {frameDevs.length === 0 ? (
+        <div className="px-4 pb-4 space-y-3">
+          {totalDeviations === 0 ? (
             <div className="flex items-center gap-2 text-sm text-green-400 py-1">
               <span className="text-base">✓</span>
               <span>No deviations on this frame.</span>
             </div>
           ) : (
-            frameDevs.map((dev, di) =>
-              (dev.deviating_joints ?? []).map((jd, ji) => (
-                <JointRow key={`${di}-${ji}`} jointDev={jd} severity={dev.severity} />
-              ))
-            )
+            BODY_REGIONS.map(({ label, joints }) => {
+              const regionJoints = joints.filter((j) => activeJoints[j])
+              if (regionJoints.length === 0) return null
+              return (
+                <div key={label}>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600 mb-1.5">
+                    {label}
+                  </p>
+                  <div className="space-y-2">
+                    {regionJoints.map((jointKey) => {
+                      const { jointDev, severity } = activeJoints[jointKey]
+                      return <JointRow key={jointKey} jointDev={jointDev} severity={severity} />
+                    })}
+                  </div>
+                </div>
+              )
+            })
           )}
         </div>
       )}
