@@ -79,6 +79,11 @@ LANDMARK_NAMES: dict[int, str] = {
 
 N_LANDMARKS = 33
 
+# Max dimension (width or height) for frames fed to MediaPipe. Larger frames
+# are downscaled proportionally before detection. MediaPipe's person detector
+# is optimized for ~640-1080px images; 4K frames often cause detection failure.
+_MAX_FRAME_DIMENSION = 1080
+
 
 # ---------------------------------------------------------------------------
 # Result type
@@ -183,13 +188,16 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
     if not frame_paths:
         raise ValueError("frame_paths is empty — no frames to process")
 
+    from app.config import get_settings
+    settings = get_settings()
+
     model_path = _ensure_model()
     options = _PoseLandmarkerOptions(
         base_options=_BaseOptions(model_asset_path=model_path),
         running_mode=_RunningMode.IMAGE,
         num_poses=1,
-        min_pose_detection_confidence=0.5,
-        min_pose_presence_confidence=0.5,
+        min_pose_detection_confidence=settings.pose_detection_confidence,
+        min_pose_presence_confidence=settings.pose_presence_confidence,
     )
 
     raw_landmarks: list[np.ndarray | None] = []
@@ -201,6 +209,22 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
             bgr = cv2.imread(frame_path)
             if bgr is None:
                 raise RuntimeError(f"Could not read image: {frame_path}")
+
+            # Downscale large frames - MediaPipe's person detector is optimized
+            # for ~640-1080px images and often fails on 4K/high-res input.
+            h, w = bgr.shape[:2]
+            if max(h, w) > _MAX_FRAME_DIMENSION:
+                scale = _MAX_FRAME_DIMENSION / max(h, w)
+                new_w, new_h = int(w * scale), int(h * scale)
+                bgr = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                if i == 0:
+                    logger.info(
+                        "Resizing frames from %dx%d to %dx%d for pose detection",
+                        w, h, new_w, new_h,
+                    )
+            elif i == 0:
+                logger.info("Frame resolution: %dx%d (no resize needed)", w, h)
+
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
@@ -231,9 +255,15 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
         frames_with_pose, frames_processed, detection_rate * 100,
     )
 
-    if detection_rate < 0.5:
+    min_rate = settings.pose_min_detection_rate
+    if detection_rate < min_rate:
+        failed_indices = sorted(set(range(frames_processed)) - detected)
+        logger.debug(
+            "Failed frame indices (first 20): %s", failed_indices[:20],
+        )
         raise ValueError(
-            f"Pose detection rate {detection_rate:.1%} is below the 50%% threshold "
+            f"Pose detection rate {detection_rate:.1%} is below the "
+            f"{min_rate:.0%} threshold "
             f"({frames_with_pose}/{frames_processed} frames detected). "
             "Ensure the person is clearly visible throughout the video."
         )

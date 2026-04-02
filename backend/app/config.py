@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     max_video_duration_seconds: int = 30
     max_video_size_mb: int = 100
 
+    # Pose estimation
+    pose_min_detection_rate: float = 0.15
+    pose_detection_confidence: float = 0.1
+    pose_presence_confidence: float = 0.1
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]

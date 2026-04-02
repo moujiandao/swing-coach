@@ -2,6 +2,11 @@
 
 ## [2026-04-02]
 
+### Fixed
+- `pose_estimator.py`: Downscale high-res frames (>1080px) before MediaPipe detection — fixes false rejection of valid videos where person detector fails on 4K input
+- `pose_estimator.py`: Lower minimum detection rate threshold from 50% to 15% — interpolation already fills gaps, so fewer detections still produce usable landmarks
+- `config.py`: Lower default MediaPipe confidence from 0.5 to 0.1 — wide-angle court shots have small persons that need lower confidence for detection (60% detection rate vs 1% at 0.5)
+
 ### Added
 - `feature_engine.py`: 5 new pipeline metrics — `left_elbow_angle`, `left_arm_elevation`, `stance_width`, `head_movement` (joint_angles), `wrist_acceleration` (velocities)
 - `deviation_annotator.py`: 4 new entries in `JOINT_LANDMARK_MAP` + per-metric direction labels (`head_movement` uses "too_low"/"too_high")

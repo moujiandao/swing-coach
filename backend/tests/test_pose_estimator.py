@@ -147,13 +147,13 @@ def test_detection_rate_partial(blank_frame_paths):
 
 
 def test_raises_when_detection_rate_below_threshold(blank_frame_paths):
-    """<50% frames with a pose should raise ValueError."""
+    """<15% frames with a pose should raise ValueError (configurable threshold)."""
     n = len(blank_frame_paths)
-    # Only 4 out of 10 detected → 40%
-    results = [_make_pose_result(has_pose=(i < 4)) for i in range(n)]
+    # Only 1 out of 10 detected → 10%, below default 15% threshold
+    results = [_make_pose_result(has_pose=(i < 1)) for i in range(n)]
 
     with _patched_landmarker(results):
-        with pytest.raises(ValueError, match="50%"):
+        with pytest.raises(ValueError, match="15%"):
             extract_poses(blank_frame_paths)
 
 
