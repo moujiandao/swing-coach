@@ -17,13 +17,26 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 ---
 
 ## Current State
-[Claude updates this]
+**2026-04-02** — Full-body eval polish complete (Tracks A–D from `PLAN_full_body_eval_polish.md`).
+
+- **Track A done**: feature_engine.py now extracts 10 joint angles (added left_elbow_angle, left_arm_elevation, stance_width, head_movement) and 4 velocities (added wrist_acceleration). deviation_annotator.py updated with new JOINT_LANDMARK_MAP entries + direction labels. Head skeleton connections added to models.py.
+- **Track B done**: New `evals.py` with 9 deterministic pipeline checks, integrated into tasks.py after feedback generation. Results in `coaching_feedback.eval_passed` / `eval_issues`.
+- **Track C done**: `scripts/eval_feedback_quality.py` — offline LLM-as-judge + self-repair loop. `feedback_generator.py` gains optional `critique_context` param.
+- **Track D done**: FrameDeviationPanel groups joints by body region. Stance width delta indicator in ComparisonView. `getStanceWidthDeviation` helper in landmarks.js.
+- **Tests**: 298 passing (6 skipped), frontend builds clean.
+- **Branch**: `feature/pro-reference-v2`
 
 ## Next Task
-[Claude updates this]
+Merge `feature/pro-reference-v2` → `main` when ready. Then:
+- Test full pipeline end-to-end with a real video: `scripts/generate_synthetic_reference.py` then `scripts/test_e2e_v2.py` — verify overlay data includes all 10 joint keys
+- Verify `FrameDeviationPanel` shows "Legs & Stance" and "Head" groups in browser
+- Run `scripts/eval_feedback_quality.py --analysis-id <uuid>` against a completed analysis to verify rubric scores print
+- Consider enabling `ENABLE_LLM_EVAL_REPAIR=true` in production after manual validation of repair quality
 
 ## Open Issues
-[Claude updates this]
+- RQ worker crashes with SIGABRT on macOS when MediaPipe runs in forked process. Workaround: `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run rq worker`
+- Stance width deviation threshold is 10° (same as angles) — semantically wrong for normalized distance. When you have real swing data, tune the threshold (e.g., 0.05 normalized units) in `deviation_annotator.py:_DEFAULT_THRESHOLD_DEGREES`
+- Head movement direction label uses `diff_degrees` field even though the value is a signed y-offset, not degrees. Acceptable per plan Decision 1 (Option B)
 
 ## What This Is
 

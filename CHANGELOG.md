@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-04-02]
+
+### Added
+- `feature_engine.py`: 5 new pipeline metrics — `left_elbow_angle`, `left_arm_elevation`, `stance_width`, `head_movement` (joint_angles), `wrist_acceleration` (velocities)
+- `deviation_annotator.py`: 4 new entries in `JOINT_LANDMARK_MAP` + per-metric direction labels (`head_movement` uses "too_low"/"too_high")
+- `models.py`: 4 head skeleton bone connections (nose, ears, shoulders) in `LANDMARK_CONNECTIONS`
+- `evals.py`: New file — 9 deterministic pipeline checks (feature completeness, score bounds, frame consistency, phase coverage, schema completeness, fix alignment, numeric values, severity ordering, drill-fix linkage)
+- `tasks.py`: Pipeline eval integrated after feedback generation; results stored in `coaching_feedback` as `eval_passed`/`eval_issues`
+- `scripts/eval_feedback_quality.py`: New offline LLM-as-judge script — 4-dimension rubric (0–10), optional self-repair loop when score < 7
+- `feedback_generator.py`: Optional `critique_context` param to inject judge critique into regeneration
+- `FrameDeviationPanel.jsx`: Body region grouping (Hitting Arm, Non-Hitting Arm, Torso, Legs & Stance, Head) — region headers only shown when region has active deviations
+- `ComparisonView.jsx`: Per-frame stance width delta indicator below canvas (amber = wider than pro, green = narrower)
+- `landmarks.js`: `getStanceWidthDeviation(frameDeviations, frameIndex)` helper
+
+### Changed
+- Test suite: 298 tests passing (was 102 before this session — added 167 new tests across feature engine, deviation annotator, and evals)
+
 ## [2026-04-01]
 
 ### Added
