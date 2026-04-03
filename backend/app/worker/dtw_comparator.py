@@ -21,7 +21,16 @@ logger = logging.getLogger(__name__)
 # Tuning constants
 # ---------------------------------------------------------------------------
 
-_SCALE_FACTOR = 50.0  # DTW distance at which score decays to 100/e ≈ 37
+# Per-phase scale factors: DTW distance at which score decays to 100/e ~ 37.
+# Higher = more forgiving (needs larger distance to penalize).
+_PHASE_SCALE_FACTORS: dict[str, float] = {
+    "preparation":    50.0,
+    "backswing":      65.0,   # more forgiving - beginners often have unconventional backswings
+    "forward_swing":  50.0,
+    "contact":        50.0,
+    "follow_through": 35.0,   # stricter - follow-through is a reliable indicator of form
+}
+_DEFAULT_SCALE_FACTOR = 50.0  # fallback for unlisted phases
 
 _PHASE_WEIGHTS: dict[str, float] = {
     "preparation":   0.05,
@@ -74,7 +83,11 @@ def _resample(arr: np.ndarray, target_len: int) -> np.ndarray:
     return np.interp(x_new, x_old, arr).astype(np.float32)
 
 
-def _dtw_score(user_seg: np.ndarray, pro_seg: np.ndarray) -> float:
+def _dtw_score(
+    user_seg: np.ndarray,
+    pro_seg: np.ndarray,
+    scale_factor: float = _DEFAULT_SCALE_FACTOR,
+) -> float:
     """
     Compute a 0-100 similarity score from the DTW distance between two segments.
     Both segments are 1-D float arrays (one joint angle timeseries for one phase).
@@ -85,7 +98,7 @@ def _dtw_score(user_seg: np.ndarray, pro_seg: np.ndarray) -> float:
     dist = dtw(u, p)
     # Normalise by length so shorter phases don't dominate
     normalised = dist / max(len(user_seg), 1)
-    return float(100.0 * math.exp(-normalised / _SCALE_FACTOR))
+    return float(100.0 * math.exp(-normalised / scale_factor))
 
 
 def _timing_offset_ms(
@@ -182,6 +195,7 @@ def compare_swing(
 
         u_start, u_end = user_phases[phase]
         p_start, p_end = pro_phases[phase]
+        phase_scale = _PHASE_SCALE_FACTORS.get(phase, _DEFAULT_SCALE_FACTOR)
 
         joint_phase_scores: list[float] = []
 
@@ -197,7 +211,7 @@ def compare_swing(
             user_rs = _resample(user_seg, target_len)
             pro_rs  = _resample(pro_seg,  target_len)
 
-            score = _dtw_score(user_rs, pro_rs)
+            score = _dtw_score(user_rs, pro_rs, scale_factor=phase_scale)
             joint_phase_scores.append(score)
 
             severity = _classify_severity(score)
@@ -226,7 +240,7 @@ def compare_swing(
                     tlen = max(len(u_seg), len(p_seg))
                     u_rs = _resample(u_seg, tlen)
                     p_rs = _resample(p_seg, tlen)
-                    accel_score = _dtw_score(u_rs, p_rs)
+                    accel_score = _dtw_score(u_rs, p_rs, scale_factor=phase_scale)
                     joint_phase_scores.append(accel_score)
 
                     severity = _classify_severity(accel_score)
