@@ -13,6 +13,7 @@ from app.worker.dtw_comparator import (
     Deviation,
     _PHASE_WEIGHTS,
     compare_swing,
+    compute_base_score,
 )
 from app.worker.feature_engine import FeatureExtractionResult
 
@@ -326,3 +327,92 @@ class TestSyntheticReference:
         user = _make_features(noisy_angles, phases=phases)
         result = compare_swing(user, ref, fps=30.0)
         assert result.overall_score > 70.0, f"Expected high score for near-identical swing, got {result.overall_score:.1f}"
+
+
+# ---------------------------------------------------------------------------
+# compute_base_score
+# ---------------------------------------------------------------------------
+
+class TestBaseScore:
+    def _make_base_features(self, n: int = _N, seed: int = 0) -> FeatureExtractionResult:
+        rng = np.random.default_rng(seed)
+        return FeatureExtractionResult(
+            joint_angles={
+                "stance_width": rng.uniform(0.2, 0.5, n).astype(np.float32),
+                "knee_bend": rng.uniform(140.0, 170.0, n).astype(np.float32),
+                "hip_rotation": rng.uniform(20.0, 60.0, n).astype(np.float32),
+                "elbow_angle": rng.uniform(80.0, 170.0, n).astype(np.float32),
+            },
+            velocities={
+                "hip_speed": rng.uniform(50.0, 200.0, n).astype(np.float32),
+                "wrist_speed": rng.uniform(100.0, 300.0, n).astype(np.float32),
+            },
+            phases=_PHASES,
+            contact_frame=38,
+        )
+
+    def _make_base_ref(self, features: FeatureExtractionResult) -> dict:
+        return {
+            "player": "test_pro",
+            "stroke_type": "forehand",
+            "joint_angles": features.joint_angles,
+            "velocities": features.velocities,
+            "phases": _PHASES,
+            "metadata": {},
+        }
+
+    def test_identical_base_score_near_100(self):
+        features = self._make_base_features(seed=70)
+        ref = self._make_base_ref(features)
+        score = compute_base_score(features, ref)
+        assert score > 95.0, f"Expected ~100 for identical, got {score:.1f}"
+
+    def test_different_base_score_low(self):
+        features = self._make_base_features(seed=71)
+        ref_features = self._make_base_features(seed=72)
+        # Add very large offset to make them clearly different
+        for k in ["stance_width", "knee_bend", "hip_rotation"]:
+            ref_features.joint_angles[k] = ref_features.joint_angles[k] + 200.0
+        ref_features.velocities["hip_speed"] = ref_features.velocities["hip_speed"] + 1000.0
+        ref = self._make_base_ref(ref_features)
+        score = compute_base_score(features, ref)
+        assert score < 80.0, f"Expected notably lower score for different, got {score:.1f}"
+
+    def test_base_score_in_0_100(self):
+        features = self._make_base_features(seed=73)
+        ref = self._make_base_ref(self._make_base_features(seed=74))
+        score = compute_base_score(features, ref)
+        assert 0.0 <= score <= 100.0
+
+    def test_base_score_missing_features_returns_50(self):
+        """When no lower-body features exist, fallback to 50."""
+        features = FeatureExtractionResult(
+            joint_angles={"elbow_angle": np.ones(_N, dtype=np.float32)},
+            velocities={"wrist_speed": np.ones(_N, dtype=np.float32)},
+            phases=_PHASES,
+            contact_frame=38,
+        )
+        ref = {"joint_angles": {"elbow_angle": np.ones(_N)}, "velocities": {}}
+        score = compute_base_score(features, ref)
+        assert score == 50.0
+
+    def test_base_score_partial_features(self):
+        """Score computes correctly with only some base features available."""
+        features = FeatureExtractionResult(
+            joint_angles={
+                "knee_bend": np.linspace(140, 170, _N).astype(np.float32),
+                "hip_rotation": np.linspace(20, 60, _N).astype(np.float32),
+            },
+            velocities={},
+            phases=_PHASES,
+            contact_frame=38,
+        )
+        ref = {
+            "joint_angles": {
+                "knee_bend": np.linspace(140, 170, _N).astype(np.float32),
+                "hip_rotation": np.linspace(20, 60, _N).astype(np.float32),
+            },
+            "velocities": {},
+        }
+        score = compute_base_score(features, ref)
+        assert score > 90.0, f"Expected high score for identical partial, got {score:.1f}"

@@ -239,3 +239,76 @@ def compare_swing(
         phase_scores=phase_scores,
         deviations=all_deviations,
     )
+
+
+# ---------------------------------------------------------------------------
+# Base score — lower body fundamentals across the entire swing
+# ---------------------------------------------------------------------------
+
+_BASE_SCORE_WEIGHTS: dict[str, float] = {
+    "stance_width":  0.25,
+    "knee_bend":     0.30,
+    "hip_rotation":  0.25,
+    "hip_speed":     0.20,
+}
+
+
+def compute_base_score(
+    user_features: FeatureExtractionResult,
+    pro_reference: dict,
+    user_phases: dict[str, tuple[int, int]] | None = None,
+    pro_phases: dict[str, tuple[int, int]] | None = None,
+) -> float:
+    """
+    Compute a 0-100 "base" score evaluating lower body fundamentals
+    across the entire swing (not phase-segmented).
+
+    Compares stance_width, knee_bend, and hip_rotation from joint_angles,
+    plus hip_speed from velocities, using DTW with weighted averaging.
+
+    Args:
+        user_features: Output of extract_features().
+        pro_reference: Reference dict with "joint_angles" and "velocities".
+        user_phases: Unused, accepted for call-site consistency.
+        pro_phases: Unused, accepted for call-site consistency.
+
+    Returns:
+        Single 0-100 float.
+    """
+    user_angles = user_features.joint_angles
+    user_velocities = user_features.velocities
+    pro_angles: dict[str, np.ndarray] = pro_reference.get("joint_angles", {})
+    pro_velocities: dict[str, np.ndarray] = pro_reference.get("velocities", {})
+
+    weighted_sum = 0.0
+    total_weight = 0.0
+
+    for key, weight in _BASE_SCORE_WEIGHTS.items():
+        # hip_speed lives in velocities; the rest are in joint_angles
+        if key == "hip_speed":
+            user_series = user_velocities.get(key)
+            pro_series = pro_velocities.get(key)
+        else:
+            user_series = user_angles.get(key)
+            pro_series = pro_angles.get(key)
+
+        if user_series is None or pro_series is None:
+            continue
+        if len(user_series) < 2 or len(pro_series) < 2:
+            continue
+
+        target_len = max(len(user_series), len(pro_series))
+        user_rs = _resample(user_series, target_len)
+        pro_rs = _resample(pro_series, target_len)
+
+        score = _dtw_score(user_rs, pro_rs)
+        weighted_sum += weight * score
+        total_weight += weight
+
+    if total_weight < 1e-9:
+        logger.warning("Base score: no matching lower-body features found, returning 50.0")
+        return 50.0
+
+    base = weighted_sum / total_weight
+    logger.info("Base score computed: %.1f", base)
+    return float(base)

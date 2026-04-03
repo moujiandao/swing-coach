@@ -29,7 +29,7 @@ from app.pro_references.loader import ProReferenceDB
 from app.services.db import get_session
 from app.services.s3 import download_video, upload_file
 from app.worker.deviation_annotator import compute_frame_deviations
-from app.worker.dtw_comparator import compare_swing
+from app.worker.dtw_comparator import compare_swing, compute_base_score
 from app.worker.evals import run_pipeline_evals
 from app.worker.feature_engine import extract_features
 from app.worker.feedback_generator import generate_coaching_feedback
@@ -325,6 +325,14 @@ def process_analysis(analysis_id: str) -> None:
             analysis_id, comparison.overall_score, len(comparison.deviations),
             time.perf_counter() - t0,
         )
+
+        # 8.5. Compute base score (lower body fundamentals)
+        try:
+            base = compute_base_score(features, pro_ref)
+            comparison.phase_scores["base"] = base
+            logger.info("[%s] Base score: %.1f", analysis_id, base)
+        except Exception as base_exc:
+            logger.warning("[%s] Base score computation failed (non-fatal): %s", analysis_id, base_exc)
 
         # 9. Phase alignment and deviation annotation
         t0 = time.perf_counter()
