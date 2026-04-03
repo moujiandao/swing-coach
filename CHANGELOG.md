@@ -26,6 +26,8 @@
 - `api.js`: `deleteAnalysis`, `bulkDeleteAnalyses`, updated `createProReference` and `updateProReference`
 
 ### Changed
+- `GripSelector.jsx`: Polish grip cards — larger grip images (h-28) with borders, player headshots with names below, grip name in DM Serif Display font centered under image, "ATP pros who use this grip" label
+- `index.html`: Add Google Fonts (DM Serif Display + Inter) for consistent typography
 - `dtw_comparator.py`: Per-phase DTW scale factors (backswing 65.0 more forgiving, follow_through 35.0 stricter)
 - `config.py`: Frame extraction FPS default increased from 60 to 120
 - `pro_references.py`: PATCH endpoint now persists `description` field

@@ -61,19 +61,25 @@ function PlayerHeadshot({ name, slug }) {
 
   if (imgError) {
     return (
-      <div className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-300 shrink-0">
-        {initials}
+      <div className="flex flex-col items-center gap-1">
+        <div className="h-11 w-11 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-300 shrink-0">
+          {initials}
+        </div>
+        <span className="text-[10px] text-gray-400 text-center leading-tight">{name}</span>
       </div>
     )
   }
 
   return (
-    <img
-      src={`/players/${slug}.jpg`}
-      alt={name}
-      onError={() => setImgError(true)}
-      className="h-8 w-8 rounded-full object-cover shrink-0"
-    />
+    <div className="flex flex-col items-center gap-1">
+      <img
+        src={`/players/${slug}.jpg`}
+        alt={name}
+        onError={() => setImgError(true)}
+        className="h-11 w-11 rounded-full object-cover shrink-0"
+      />
+      <span className="text-[10px] text-gray-400 text-center leading-tight">{name}</span>
+    </div>
   )
 }
 
@@ -97,21 +103,30 @@ export default function GripSelector({ selectedGrip, onSelect }) {
                 : 'border-gray-700 hover:border-gray-500 bg-gray-900'
               }`}
           >
-            {/* Grip image */}
-            <GripImage src={grip.image} label={grip.label} />
-
-            {/* Label + players */}
-            <div className="px-3 py-2.5 space-y-2">
-              <p className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-gray-200'}`}>
-                {grip.label}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {grip.players.map((player) => (
-                  <div key={player.slug} className="flex items-center gap-1.5">
-                    <PlayerHeadshot name={player.name} slug={player.slug} />
-                    <span className="text-xs text-gray-400">{player.name}</span>
+            <div className="p-3 space-y-3">
+              {/* Grip image + players row */}
+              <div className="flex gap-3">
+                <GripImage src={grip.image} label={grip.label} />
+                <div className="flex-1 flex flex-col items-center justify-center space-y-1.5">
+                  <p className="text-[11px] tracking-wider text-gray-500">ATP pros who use this grip</p>
+                  <div className="flex flex-wrap justify-center gap-3">
+                    {grip.players.map((player) => (
+                      <div key={player.slug}>
+                        <PlayerHeadshot name={player.name} slug={player.slug} />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+              </div>
+
+              {/* Grip name below the grip image */}
+              <div className="flex gap-3">
+                <p
+                  className={`w-28 shrink-0 text-center text-sm whitespace-nowrap tracking-wide ${isSelected ? 'text-white' : 'text-gray-200'}`}
+                  style={{ fontFamily: "'DM Serif Display', serif" }}
+                >
+                  {grip.label}
+                </p>
               </div>
             </div>
 
@@ -136,7 +151,7 @@ function GripImage({ src, label }) {
 
   if (imgError) {
     return (
-      <div className="h-24 bg-gray-800 flex items-center justify-center">
+      <div className="h-28 w-28 shrink-0 rounded-lg bg-gray-800 border-2 border-gray-600 flex items-center justify-center">
         <span className="text-xs text-gray-500">{label}</span>
       </div>
     )
@@ -147,7 +162,7 @@ function GripImage({ src, label }) {
       src={src}
       alt={`${label} grip`}
       onError={() => setImgError(true)}
-      className="w-full h-24 object-cover"
+      className="h-28 w-28 shrink-0 rounded-lg object-cover border-2 border-gray-600"
     />
   )
 }
