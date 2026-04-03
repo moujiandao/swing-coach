@@ -158,9 +158,11 @@ def compare_swing(
     """
     user_angles = user_features.joint_angles
     user_phases = user_features.phases
+    user_velocities = user_features.velocities
 
     pro_angles: dict[str, np.ndarray] = pro_reference["joint_angles"]
     pro_phases: dict[str, tuple[int, int]] = pro_reference["phases"]
+    pro_velocities: dict[str, np.ndarray] = pro_reference.get("velocities", {})
 
     # Only compare joints present in both
     common_joints = set(user_angles.keys()) & set(pro_angles.keys())
@@ -212,6 +214,37 @@ def compare_swing(
                     severity=severity,
                     description=_describe_deviation(joint, phase, mean_diff, severity),
                 ))
+
+        # Forward swing: also compare wrist_acceleration from velocities
+        if phase == "forward_swing":
+            user_accel = user_velocities.get("wrist_acceleration")
+            pro_accel = pro_velocities.get("wrist_acceleration")
+            if user_accel is not None and pro_accel is not None:
+                u_seg = user_accel[u_start: u_end + 1]
+                p_seg = pro_accel[p_start: p_end + 1]
+                if len(u_seg) >= 2 and len(p_seg) >= 2:
+                    tlen = max(len(u_seg), len(p_seg))
+                    u_rs = _resample(u_seg, tlen)
+                    p_rs = _resample(p_seg, tlen)
+                    accel_score = _dtw_score(u_rs, p_rs)
+                    joint_phase_scores.append(accel_score)
+
+                    severity = _classify_severity(accel_score)
+                    if severity is not None:
+                        mean_diff = float(np.mean(u_rs - p_rs))
+                        max_diff = float(np.max(np.abs(u_rs - p_rs)))
+                        t_offset = _timing_offset_ms(u_rs, p_rs, fps)
+                        all_deviations.append(Deviation(
+                            joint="wrist_acceleration",
+                            phase=phase,
+                            mean_diff_degrees=mean_diff,
+                            max_diff_degrees=max_diff,
+                            timing_offset_ms=t_offset,
+                            severity=severity,
+                            description=_describe_deviation(
+                                "wrist_acceleration", phase, mean_diff, severity
+                            ),
+                        ))
 
         phase_scores[phase] = float(np.mean(joint_phase_scores)) if joint_phase_scores else 50.0
 

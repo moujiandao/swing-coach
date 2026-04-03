@@ -396,6 +396,68 @@ class TestBaseScore:
         score = compute_base_score(features, ref)
         assert score == 50.0
 
+    def test_forward_swing_includes_wrist_acceleration(self):
+        """When wrist_acceleration is present, it should be factored into forward_swing score."""
+        angles = _make_angles(seed=80)
+        # User and pro have identical angles but very different wrist acceleration
+        user = FeatureExtractionResult(
+            joint_angles=angles,
+            velocities={
+                "wrist_speed": np.ones(_N, dtype=np.float32),
+                "elbow_speed": np.ones(_N, dtype=np.float32),
+                "hip_speed": np.ones(_N, dtype=np.float32),
+                "wrist_acceleration": np.ones(_N, dtype=np.float32) * 10.0,
+            },
+            phases=_PHASES,
+            contact_frame=38,
+        )
+        ref = {
+            "player": "test_pro",
+            "stroke_type": "forehand",
+            "joint_angles": angles,
+            "velocities": {
+                "wrist_acceleration": np.ones(_N, dtype=np.float32) * 500.0,
+            },
+            "phases": _PHASES,
+            "metadata": {},
+        }
+        result = compare_swing(user, ref, fps=30.0)
+        # Forward swing should be penalized because of acceleration mismatch
+        # Without wrist_acceleration, identical angles would give ~100
+        assert result.phase_scores["forward_swing"] < 99.0, (
+            f"Expected forward_swing to be penalized by acceleration mismatch, "
+            f"got {result.phase_scores['forward_swing']:.1f}"
+        )
+
+    def test_wrist_acceleration_deviation_generated(self):
+        """When wrist_acceleration score is below threshold, a Deviation should appear."""
+        angles = _make_angles(seed=81)
+        user = FeatureExtractionResult(
+            joint_angles=angles,
+            velocities={
+                "wrist_speed": np.ones(_N, dtype=np.float32),
+                "elbow_speed": np.ones(_N, dtype=np.float32),
+                "hip_speed": np.ones(_N, dtype=np.float32),
+                "wrist_acceleration": np.ones(_N, dtype=np.float32) * 10.0,
+            },
+            phases=_PHASES,
+            contact_frame=38,
+        )
+        ref = {
+            "player": "test_pro",
+            "stroke_type": "forehand",
+            "joint_angles": angles,
+            "velocities": {
+                "wrist_acceleration": np.ones(_N, dtype=np.float32) * 2000.0,
+            },
+            "phases": _PHASES,
+            "metadata": {},
+        }
+        result = compare_swing(user, ref, fps=30.0)
+        accel_devs = [d for d in result.deviations if d.joint == "wrist_acceleration"]
+        assert len(accel_devs) > 0, "Expected a wrist_acceleration deviation"
+        assert accel_devs[0].phase == "forward_swing"
+
     def test_base_score_partial_features(self):
         """Score computes correctly with only some base features available."""
         features = FeatureExtractionResult(
