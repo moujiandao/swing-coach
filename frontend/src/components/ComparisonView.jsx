@@ -36,6 +36,9 @@ export default function ComparisonView({ overlayData }) {
     landmark_connections,
     detection_mask,
     video_url,
+    frame_mapping,
+    pro_video_url,
+    pro_fps,
   } = overlayData
 
   const totalFrames = user_landmarks?.length ?? 1
@@ -47,6 +50,7 @@ export default function ComparisonView({ overlayData }) {
   const [panelOpen, setPanelOpen] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
   const [alignSkeletons, setAlignSkeletons] = useState(true)
+  const [videoSource, setVideoSource] = useState('student') // 'student' | 'pro'
 
   // Canvas sizing via ResizeObserver
   const containerRef = useRef(null)
@@ -125,6 +129,10 @@ export default function ComparisonView({ overlayData }) {
         case 'A':
           setAlignSkeletons((v) => !v)
           break
+        case 'v':
+        case 'V':
+          if (pro_video_url) setVideoSource((s) => (s === 'student' ? 'pro' : 'student'))
+          break
         case 'm':
         case 'M':
           setMode((m) => (m === 'overlay' ? 'side-by-side' : 'overlay'))
@@ -152,7 +160,13 @@ export default function ComparisonView({ overlayData }) {
 
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [togglePlayPause, stepBackward, stepForward, seekToPhase, playbackSpeed, setPlaybackSpeed])
+  }, [togglePlayPause, stepBackward, stepForward, seekToPhase, playbackSpeed, setPlaybackSpeed, pro_video_url])
+
+  // Seek time for the pro video: map user frame → original pro frame → seconds
+  const proVideoTime =
+    pro_fps && frame_mapping?.length > currentFrame && frame_mapping[currentFrame] != null
+      ? frame_mapping[currentFrame] / pro_fps
+      : null
 
   return (
     <>
@@ -177,6 +191,25 @@ export default function ComparisonView({ overlayData }) {
               </button>
             ))}
           </div>
+
+          {/* Video source toggle — only shown when pro video is available */}
+          {pro_video_url && (
+            <div className="flex rounded-lg overflow-hidden border border-gray-700 text-xs font-medium">
+              {[['student', 'My Video'], ['pro', 'Pro Video']].map(([src, label]) => (
+                <button
+                  key={src}
+                  onClick={() => setVideoSource(src)}
+                  className={`px-3 py-1.5 transition-colors ${
+                    videoSource === src
+                      ? 'bg-[#2D8653] text-white'
+                      : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Skeleton / deviation toggles */}
           <div className="flex items-center gap-3 text-xs flex-wrap">
@@ -245,7 +278,8 @@ export default function ComparisonView({ overlayData }) {
           })()}
           {effectiveMode === 'overlay' ? (
             <DualSkeletonCanvas
-              videoSrc={video_url || null}
+              videoSrc={videoSource === 'student' ? (video_url || null) : (pro_video_url || null)}
+              videoTimeSeconds={videoSource === 'pro' ? proVideoTime : null}
               userLandmarks={user_landmarks}
               proLandmarks={pro_landmarks}
               frameDeviations={frame_deviations}
@@ -285,11 +319,12 @@ export default function ComparisonView({ overlayData }) {
                 />
               </div>
 
-              {/* Right: pro skeleton on dark background */}
+              {/* Right: pro skeleton, with pro video as background if available */}
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-[#FFD700] font-medium mb-1">Pro</p>
                 <DualSkeletonCanvas
-                  videoSrc={null}
+                  videoSrc={pro_video_url || null}
+                  videoTimeSeconds={proVideoTime}
                   userLandmarks={null}
                   proLandmarks={pro_landmarks}
                   frameDeviations={[]}

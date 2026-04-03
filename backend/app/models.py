@@ -251,8 +251,12 @@ class ProReferenceListItem(BaseModel):
     stroke_type: StrokeType
     status: ProReferenceStatus
     thumbnail_s3_key: str | None
+    video_s3_key: str | None
     is_builtin: bool
     created_at: datetime
+    # Resolved URLs (set by the endpoint, not from DB)
+    thumbnail_url: str | None = None
+    video_url: str | None = None
 
     @field_serializer("id")
     def serialize_id(self, v: uuid.UUID) -> str:
@@ -299,6 +303,9 @@ class OverlayResponse(BaseModel):
     # Presigned URLs generated at request time for video playback
     video_url: str | None = None
     keyframe_urls: dict | None = None
+    # Pro reference video — only present when pro_reference_id is set and video was uploaded
+    pro_video_url: str | None = None
+    pro_fps: float | None = None
 
 
 class ProPreviewResponse(BaseModel):

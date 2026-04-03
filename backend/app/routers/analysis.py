@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Analysis, AnalysisResponse, AnalysisStatus, LANDMARK_CONNECTIONS, OverlayResponse
+from app.models import Analysis, AnalysisResponse, AnalysisStatus, LANDMARK_CONNECTIONS, OverlayResponse, ProReference
 from app.services.db import get_db
 from app.services.s3 import generate_presigned_download_url, generate_presigned_urls
 
@@ -85,6 +85,18 @@ async def get_analysis_overlay(
     user_lm = _round_landmarks(analysis.pose_data)
     pro_lm  = _round_landmarks(analysis.aligned_pro_landmarks)
 
+    # Load pro reference video URL if available
+    pro_video_url = None
+    pro_fps = None
+    if analysis.pro_reference_id is not None:
+        pro_ref_result = await db.execute(
+            select(ProReference).where(ProReference.id == analysis.pro_reference_id)
+        )
+        pro_ref = pro_ref_result.scalar_one_or_none()
+        if pro_ref and pro_ref.video_s3_key:
+            pro_video_url = generate_presigned_download_url(pro_ref.video_s3_key)
+            pro_fps = pro_ref.fps
+
     payload = OverlayResponse(
         user_landmarks=user_lm,
         pro_landmarks=pro_lm,
@@ -96,6 +108,8 @@ async def get_analysis_overlay(
         detection_mask=analysis.detection_mask,
         video_url=generate_presigned_download_url(analysis.video_s3_key),
         keyframe_urls=_build_keyframe_urls(analysis.keyframe_s3_keys),
+        pro_video_url=pro_video_url,
+        pro_fps=pro_fps,
     )
 
     response = JSONResponse(content=payload.model_dump())

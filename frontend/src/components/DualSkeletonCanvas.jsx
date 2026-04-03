@@ -159,6 +159,7 @@ export default function DualSkeletonCanvas({
   detectionMask = null,
   width = 640,
   height = 360,
+  videoTimeSeconds = null,  // when set, overrides currentFrame/fps for video seek (used for pro video)
 }) {
   const canvasRef = useRef(null)
   const videoRef = useRef(null)
@@ -251,15 +252,17 @@ export default function DualSkeletonCanvas({
     return () => cancelAnimationFrame(rafRef.current)
   }, [])
 
-  // Seek video when currentFrame changes
+  // Seek video when currentFrame changes.
+  // videoTimeSeconds overrides the default calculation (used when showing pro video,
+  // where the seek target is frame_mapping[currentFrame] / pro_fps).
   useEffect(() => {
     const video = videoRef.current
     if (!video || !videoSrc || fps <= 0) return
-    const targetTime = currentFrame / fps
+    const targetTime = videoTimeSeconds != null ? videoTimeSeconds : currentFrame / fps
     if (Math.abs(video.currentTime - targetTime) > 0.5 / fps) {
       video.currentTime = targetTime
     }
-  }, [currentFrame, fps, videoSrc])
+  }, [currentFrame, fps, videoSrc, videoTimeSeconds])
 
   // Derive phase name for the border color (raw key, not formatted)
   let currentPhaseKey = null
