@@ -58,6 +58,24 @@ export async function cancelAnalysis(analysisId) {
 }
 
 /**
+ * Delete a single analysis and its associated S3 objects.
+ * @returns {void}
+ */
+export async function deleteAnalysis(analysisId) {
+  await api.delete(`/api/analysis/${analysisId}`)
+}
+
+/**
+ * Bulk delete analyses by IDs.
+ * @param {string[]} ids
+ * @returns {{ deleted: number }}
+ */
+export async function bulkDeleteAnalyses(ids) {
+  const { data } = await api.post('/api/analysis/bulk-delete', { ids })
+  return data
+}
+
+/**
  * Fetch the user's analysis history.
  * @returns {AnalysisResponse[]}
  */
