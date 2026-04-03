@@ -79,14 +79,14 @@ def test_target_fps_downsamples_frame_count(synthetic_video_30fps, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_slowmo_auto_downsampled_to_60fps(synthetic_video_120fps, tmp_path):
+def test_slowmo_auto_kept_at_native_fps(synthetic_video_120fps, tmp_path):
     """
-    A 120fps source with no target_fps should be auto-downsampled to 60fps
-    (configurable default). Frame count should reflect 60fps x 3s = ~180 frames.
+    A 120fps source with default target_fps=120 keeps native fps (no downsampling).
+    Frame count should reflect 120fps x 3s = ~360 frames.
     """
     result = extract_frames(synthetic_video_120fps, str(tmp_path / "frames"))
-    assert result.fps == 60.0, f"Expected 60.0 fps, got {result.fps}"
-    expected = int(60 * result.duration_seconds)
+    assert result.fps == 120.0, f"Expected 120.0 fps, got {result.fps}"
+    expected = int(120 * result.duration_seconds)
     assert abs(result.total_frames - expected) <= 1
 
 
