@@ -79,21 +79,21 @@ def test_target_fps_downsamples_frame_count(synthetic_video_30fps, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_slowmo_auto_downsampled_to_30fps(synthetic_video_120fps, tmp_path):
+def test_slowmo_auto_downsampled_to_60fps(synthetic_video_120fps, tmp_path):
     """
-    A 120fps source with no target_fps should be auto-downsampled to 30fps.
-    Frame count should reflect 30fps × 3s = ~90 frames.
+    A 120fps source with no target_fps should be auto-downsampled to 60fps
+    (configurable default). Frame count should reflect 60fps x 3s = ~180 frames.
     """
     result = extract_frames(synthetic_video_120fps, str(tmp_path / "frames"))
-    assert result.fps == 30.0, f"Expected 30.0 fps, got {result.fps}"
-    expected = int(30 * result.duration_seconds)
+    assert result.fps == 60.0, f"Expected 60.0 fps, got {result.fps}"
+    expected = int(60 * result.duration_seconds)
     assert abs(result.total_frames - expected) <= 1
 
 
 def test_slowmo_explicit_fps_respected(synthetic_video_120fps, tmp_path):
     """When target_fps is given explicitly it takes precedence over the auto rule."""
-    result = extract_frames(synthetic_video_120fps, str(tmp_path / "frames"), target_fps=60)
-    assert result.fps == 60.0
+    result = extract_frames(synthetic_video_120fps, str(tmp_path / "frames"), target_fps=30)
+    assert result.fps == 30.0
 
 
 # ---------------------------------------------------------------------------

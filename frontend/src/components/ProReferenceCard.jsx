@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Loader2, CheckCircle2, XCircle, ShieldCheck, MoreVertical, RefreshCw, Trash2, Pencil, Play, X } from 'lucide-react'
-import { reprocessProReference, deleteProReference, updateProReference, getProReferenceVideoUrl } from '../lib/api'
+import { reprocessProReference, deleteProReference, updateProReference } from '../lib/api'
 
 const STROKE_LABELS = {
   forehand: 'Forehand',
@@ -58,8 +58,6 @@ export default function ProReferenceCard({ reference, onUpdate, onDelete }) {
 
   // Video preview state
   const [videoModalOpen, setVideoModalOpen] = useState(false)
-  const [videoUrl, setVideoUrl] = useState(null)
-  const [videoLoading, setVideoLoading] = useState(false)
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -140,23 +138,12 @@ export default function ProReferenceCard({ reference, onUpdate, onDelete }) {
     if (e.key === 'Escape') { e.preventDefault(); cancelEditing() }
   }
 
-  async function handlePlayClick(e) {
+  function handlePlayClick(e) {
     e.stopPropagation()
     setVideoModalOpen(true)
-    if (videoUrl) return  // already fetched
-    setVideoLoading(true)
-    try {
-      const { video_url } = await getProReferenceVideoUrl(reference.id)
-      setVideoUrl(video_url)
-    } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not load video')
-      setVideoModalOpen(false)
-    } finally {
-      setVideoLoading(false)
-    }
   }
 
-  const canPreview = reference.status === 'ready' && reference.video_s3_key
+  const canPreview = reference.status === 'ready' && reference.video_url
   const formattedDate = new Date(reference.created_at).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -327,16 +314,16 @@ export default function ProReferenceCard({ reference, onUpdate, onDelete }) {
               <X className="h-4 w-4" />
             </button>
             <div className="aspect-video bg-gray-950 flex items-center justify-center">
-              {videoLoading ? (
-                <Loader2 className="h-8 w-8 text-gray-500 animate-spin" />
-              ) : videoUrl ? (
+              {reference.video_url ? (
                 <video
-                  src={videoUrl}
+                  src={reference.video_url}
                   controls
                   autoPlay
                   className="w-full h-full"
                 />
-              ) : null}
+              ) : (
+                <p className="text-sm text-gray-500">Video not available</p>
+              )}
             </div>
             <div className="px-4 py-3 bg-gray-900">
               <p className="text-sm font-semibold text-white">{reference.player_name}</p>

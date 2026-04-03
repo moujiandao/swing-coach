@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Analysis, AnalysisResponse, AnalysisStatus, LANDMARK_CONNECTIONS, OverlayResponse, ProReference
+from app.models import Analysis, AnalysisResponse, AnalysisStatus, LANDMARK_CONNECTIONS, RACQUET_CONNECTIONS, OverlayResponse, ProReference
 from app.services.db import get_db
 from app.services.s3 import generate_presigned_download_url, generate_presigned_urls
 
@@ -105,6 +105,7 @@ async def get_analysis_overlay(
         phase_boundaries=analysis.phase_boundaries or {},
         fps=analysis.fps or 30.0,
         landmark_connections=LANDMARK_CONNECTIONS,
+        racquet_connections=RACQUET_CONNECTIONS,
         detection_mask=analysis.detection_mask,
         video_url=generate_presigned_download_url(analysis.video_s3_key),
         keyframe_urls=_build_keyframe_urls(analysis.keyframe_s3_keys),

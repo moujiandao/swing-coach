@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     max_video_duration_seconds: int = 30
     max_video_size_mb: int = 100
 
+    # Frame extraction
+    frame_extraction_fps: int = 60  # target FPS when downsampling slow-mo (>60fps) video
+
     # Pose estimation
     pose_min_detection_rate: float = 0.15
     pose_detection_confidence: float = 0.1

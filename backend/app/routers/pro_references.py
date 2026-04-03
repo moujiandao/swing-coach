@@ -193,7 +193,15 @@ async def list_pro_references(
 
     result = await db.execute(stmt)
     records = result.scalars().all()
-    return [ProReferenceListItem.model_validate(r) for r in records]
+    items = []
+    for r in records:
+        item = ProReferenceListItem.model_validate(r)
+        if r.thumbnail_s3_key:
+            item.thumbnail_url = generate_presigned_download_url(r.thumbnail_s3_key)
+        if r.video_s3_key:
+            item.video_url = generate_presigned_download_url(r.video_s3_key)
+        items.append(item)
+    return items
 
 
 # ---------------------------------------------------------------------------

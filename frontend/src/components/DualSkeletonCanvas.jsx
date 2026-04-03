@@ -49,15 +49,65 @@ function drawSkeleton(ctx, coords, connections, color, dashed, alpha) {
   }
   ctx.stroke()
 
+  // Draw joint dots, skipping hand (17-22) and foot index (31-32) landmarks
+  // that aren't skeleton connection endpoints and add visual clutter
+  const SKIP_DOTS = new Set([17, 18, 19, 20, 21, 22, 31, 32])
   ctx.setLineDash([])
   ctx.globalAlpha = 0.85 * alpha
-  for (const coord of coords) {
-    if (!coord) continue
+  for (let i = 0; i < coords.length; i++) {
+    if (SKIP_DOTS.has(i) || !coords[i]) continue
     ctx.beginPath()
-    ctx.arc(coord[0], coord[1], 4, 0, 2 * Math.PI)
+    ctx.arc(coords[i][0], coords[i][1], 4, 0, 2 * Math.PI)
     ctx.fill()
   }
 
+  ctx.restore()
+}
+
+// Shoulder indices for calculating arm length (used for racquet extension)
+const SHOULDER_FOR_WRIST = { 15: 11, 16: 12 }  // left wrist→left shoulder, right→right
+
+function drawRacquet(ctx, coords, connections, color, alpha) {
+  if (!coords.length || !connections?.length || alpha < 0.01) return
+  ctx.save()
+  ctx.globalAlpha = 0.85 * alpha
+  ctx.strokeStyle = color
+  ctx.lineWidth = 6
+  ctx.lineCap = 'round'
+
+  ctx.beginPath()
+  for (const [wristIdx, fingertipIdx] of connections) {
+    const wrist = coords[wristIdx]
+    const finger = coords[fingertipIdx]
+    if (!wrist || !finger) continue
+
+    // Direction from wrist through fingertip
+    const dx = finger[0] - wrist[0]
+    const dy = finger[1] - wrist[1]
+    const handLen = Math.sqrt(dx * dx + dy * dy)
+    if (handLen < 1) continue
+
+    // Calculate arm length (shoulder→wrist) to set racquet length
+    const shoulderIdx = SHOULDER_FOR_WRIST[wristIdx]
+    const shoulder = shoulderIdx != null ? coords[shoulderIdx] : null
+    let racquetLen
+    if (shoulder) {
+      const ax = wrist[0] - shoulder[0]
+      const ay = wrist[1] - shoulder[1]
+      racquetLen = Math.sqrt(ax * ax + ay * ay)
+    } else {
+      racquetLen = handLen * 5  // fallback
+    }
+
+    // Extend from wrist outward along the wrist→fingertip direction (2x arm length)
+    const scale = (racquetLen * 2) / handLen
+    const tipX = wrist[0] + dx * scale
+    const tipY = wrist[1] + dy * scale
+
+    ctx.moveTo(wrist[0], wrist[1])
+    ctx.lineTo(tipX, tipY)
+  }
+  ctx.stroke()
   ctx.restore()
 }
 
@@ -105,6 +155,27 @@ function drawDeviationHighlights(ctx, coords, frameDevs, pulseAngle) {
       }
     }
   }
+}
+
+/**
+ * Linearly interpolate between two landmark frames.
+ * Each frame is an array of [x, y, z] arrays (one per landmark).
+ * Returns a new frame with blended positions.
+ */
+function lerpLandmarks(frameA, frameB, t) {
+  if (!frameA || !frameB) return frameA || frameB || null
+  const out = []
+  for (let i = 0; i < frameA.length; i++) {
+    const a = frameA[i]
+    const b = frameB[i]
+    if (!a || !b) { out.push(a || b || null); continue }
+    out.push([
+      a[0] + (b[0] - a[0]) * t,
+      a[1] + (b[1] - a[1]) * t,
+      a[2] + (b[2] - a[2]) * t,
+    ])
+  }
+  return out
 }
 
 function drawPhaseLabel(ctx, phaseName) {
@@ -156,6 +227,10 @@ export default function DualSkeletonCanvas({
   showProSkeleton = true,
   showDeviations = true,
   alignSkeletons = false,
+  racquetConnections = null,
+  frameProgress = 0,
+  isPlaying = false,
+  playbackSpeed = 1.0,
   detectionMask = null,
   width = 640,
   height = 360,
@@ -163,13 +238,16 @@ export default function DualSkeletonCanvas({
 }) {
   const canvasRef = useRef(null)
   const videoRef = useRef(null)
-  const pulseRef = useRef(0)
   const rafRef = useRef(null)
   const smoothedAlignRef = useRef(null)
 
   // Fade state: current rendered alpha for each skeleton (0–1)
   const userAlphaRef = useRef(showUserSkeleton ? 1 : 0)
   const proAlphaRef  = useRef(showProSkeleton  ? 1 : 0)
+
+  // Sub-frame interpolation computed directly in the rAF loop (bypasses React)
+  const localProgressRef = useRef(0)
+  const lastRafTimeRef = useRef(null)
 
   const renderRef = useRef(null)
 
@@ -191,8 +269,20 @@ export default function DualSkeletonCanvas({
     // Skip user skeleton on frames where pose was not detected (interpolated
     // data from large gaps produces garbage landmarks).
     const frameDetected = !detectionMask || detectionMask[currentFrame] !== false
-    const userLm   = frameDetected ? userLandmarks?.[currentFrame] : null
-    const proLm    = proLandmarks?.[currentFrame]
+    const nextFrame = currentFrame + 1
+    const t = localProgressRef.current
+    const hasNext = t > 0.001 && nextFrame < (userLandmarks?.length ?? 0)
+    const nextDetected = !detectionMask || detectionMask[nextFrame] !== false
+
+    // Interpolate between current and next frame for smooth playback
+    let userLm, proLm
+    if (hasNext && frameDetected && nextDetected) {
+      userLm = lerpLandmarks(userLandmarks?.[currentFrame], userLandmarks?.[nextFrame], t)
+      proLm = lerpLandmarks(proLandmarks?.[currentFrame], proLandmarks?.[nextFrame], t)
+    } else {
+      userLm = frameDetected ? userLandmarks?.[currentFrame] : null
+      proLm = proLandmarks?.[currentFrame]
+    }
     const frameDevs = getDeviationsForFrame(frameDeviations, currentFrame)
     const phaseName = getCurrentPhase(phaseBoundaries, currentFrame)
 
@@ -216,17 +306,16 @@ export default function DualSkeletonCanvas({
     // Pro skeleton (behind user)
     if (proCoords.length) {
       drawSkeleton(ctx, proCoords, landmarkConnections || [], PRO_COLOR, true, proAlphaRef.current)
+      drawRacquet(ctx, proCoords, racquetConnections, PRO_COLOR, proAlphaRef.current)
     }
 
     // User skeleton on top
     if (userCoords.length) {
       drawSkeleton(ctx, userCoords, landmarkConnections || [], USER_COLOR, false, userAlphaRef.current)
+      drawRacquet(ctx, userCoords, racquetConnections, USER_COLOR, userAlphaRef.current)
     }
 
-    // Deviation highlights
-    if (showDeviations && userCoords.length && frameDevs.length) {
-      drawDeviationHighlights(ctx, userCoords, frameDevs, pulseRef.current)
-    }
+    // Deviation highlights disabled in canvas — shown in the panel below instead
 
     // Phase label (top-left)
     drawPhaseLabel(ctx, phaseName)
@@ -234,23 +323,34 @@ export default function DualSkeletonCanvas({
     // Frame counter (top-right)
     drawFrameCounter(ctx, currentFrame, totalFrames, width)
   }, [
-    userLandmarks, proLandmarks, frameDeviations, landmarkConnections,
+    userLandmarks, proLandmarks, frameDeviations, landmarkConnections, racquetConnections,
     phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
     showDeviations, alignSkeletons, detectionMask, width, height, totalFrames,
   ])
 
   useEffect(() => { renderRef.current = render }, [render])
 
-  // rAF loop
+  // Reset sub-frame progress when frame changes (e.g., scrubbing, stepping)
   useEffect(() => {
-    function loop() {
-      pulseRef.current += 0.05
+    localProgressRef.current = frameProgress
+    lastRafTimeRef.current = null
+  }, [currentFrame, frameProgress])
+
+  // rAF loop — advances sub-frame interpolation directly (no React state)
+  useEffect(() => {
+    function loop(timestamp) {
+      if (isPlaying && lastRafTimeRef.current != null) {
+        const dt = timestamp - lastRafTimeRef.current
+        const advance = (dt / 1000) * fps * playbackSpeed
+        localProgressRef.current = Math.min(localProgressRef.current + advance, 0.999)
+      }
+      lastRafTimeRef.current = timestamp
       renderRef.current?.()
       rafRef.current = requestAnimationFrame(loop)
     }
     rafRef.current = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [])
+  }, [isPlaying, fps, playbackSpeed])
 
   // Seek video when currentFrame changes.
   // videoTimeSeconds overrides the default calculation (used when showing pro video,

@@ -288,6 +288,12 @@ LANDMARK_CONNECTIONS: list[list[int]] = [
     [26, 28],   # right knee → right ankle
 ]
 
+# Racquet extension: wrist → index fingertip, projected outward to arm length.
+# Right hand only (default). Add [15, 19] for left-handed players.
+RACQUET_CONNECTIONS: list[list[int]] = [
+    [16, 20],   # right wrist → right index fingertip
+]
+
 
 class OverlayResponse(BaseModel):
     """Full overlay dataset for the analysis canvas renderer."""
@@ -298,6 +304,7 @@ class OverlayResponse(BaseModel):
     phase_boundaries: dict         # phase name → PhaseBoundary dict
     fps: float                     # video frame rate for playback timing
     landmark_connections: list[list[int]]  # bone pairs for skeleton drawing
+    racquet_connections: list[list[int]]  # wrist→fingertip pairs (drawn thicker)
     # Per-frame boolean: True where pose was actually detected (vs interpolated)
     detection_mask: list[bool] | None = None
     # Presigned URLs generated at request time for video playback

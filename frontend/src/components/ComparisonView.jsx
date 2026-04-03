@@ -34,6 +34,7 @@ export default function ComparisonView({ overlayData }) {
     phase_boundaries,
     fps,
     landmark_connections,
+    racquet_connections,
     detection_mask,
     video_url,
     frame_mapping,
@@ -80,6 +81,7 @@ export default function ComparisonView({ overlayData }) {
   const playback = useVideoPlayback({ totalFrames, fps: fps || 30, phaseBoundaries: phase_boundaries })
   const {
     currentFrame,
+    frameProgress,
     isPlaying,
     playbackSpeed,
     setPlaybackSpeed,
@@ -284,9 +286,13 @@ export default function ComparisonView({ overlayData }) {
               proLandmarks={pro_landmarks}
               frameDeviations={frame_deviations}
               landmarkConnections={landmark_connections}
+              racquetConnections={racquet_connections}
               phaseBoundaries={phase_boundaries}
               fps={fps || 30}
               currentFrame={currentFrame}
+              frameProgress={frameProgress}
+              isPlaying={isPlaying}
+              playbackSpeed={playbackSpeed}
               showUserSkeleton={showUser}
               showProSkeleton={showPro}
               showDeviations={showDeviations}
@@ -306,9 +312,13 @@ export default function ComparisonView({ overlayData }) {
                   proLandmarks={null}
                   frameDeviations={frame_deviations}
                   landmarkConnections={landmark_connections}
+              racquetConnections={racquet_connections}
                   phaseBoundaries={phase_boundaries}
                   fps={fps || 30}
                   currentFrame={currentFrame}
+                  frameProgress={frameProgress}
+                  isPlaying={isPlaying}
+                  playbackSpeed={playbackSpeed}
                   showUserSkeleton={true}
                   showProSkeleton={false}
                   showDeviations={showDeviations}
@@ -329,9 +339,13 @@ export default function ComparisonView({ overlayData }) {
                   proLandmarks={pro_landmarks}
                   frameDeviations={[]}
                   landmarkConnections={landmark_connections}
+              racquetConnections={racquet_connections}
                   phaseBoundaries={phase_boundaries}
                   fps={fps || 30}
                   currentFrame={currentFrame}
+                  frameProgress={frameProgress}
+                  isPlaying={isPlaying}
+                  playbackSpeed={playbackSpeed}
                   showUserSkeleton={false}
                   showProSkeleton={true}
                   showDeviations={false}

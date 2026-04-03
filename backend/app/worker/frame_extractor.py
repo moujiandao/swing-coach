@@ -134,10 +134,9 @@ def extract_frames(
     # --- 3. Resolve output FPS ---
     if target_fps is None:
         if source_fps > 60:
-            # Slow-mo footage — keep 30fps worth of motion data.
-            target_fps = 30
+            target_fps = settings.frame_extraction_fps
             logger.info(
-                "Source FPS %.2f > 60; auto-downsampling to %d fps", source_fps, target_fps
+                "Source FPS %.2f > 60; downsampling to %d fps", source_fps, target_fps
             )
         else:
             target_fps = int(round(source_fps))
