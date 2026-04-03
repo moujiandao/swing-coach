@@ -8,7 +8,7 @@ import AddProReferenceModal from './AddProReferenceModal'
  * Auto-filters to the currently selected strokeType.
  * Calls onSelect(referenceId) when a card is picked.
  */
-export default function ProReferencePicker({ strokeType, selectedId, onSelect }) {
+export default function ProReferencePicker({ strokeType, selectedId, onSelect, filterFn }) {
   const [references, setReferences] = useState([])
   const [loading, setLoading] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -41,9 +41,12 @@ export default function ProReferencePicker({ strokeType, selectedId, onSelect })
     el.scrollBy({ left: direction * 160, behavior: 'smooth' })
   }
 
+  // Apply optional client-side filter (e.g., grip-based player filtering)
+  const filtered = filterFn ? references.filter(filterFn) : references
+
   if (!strokeType) return null
 
-  if (!loading && references.length === 0) {
+  if (!loading && filtered.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-gray-700 px-4 py-3 text-sm text-gray-400 flex items-center gap-3">
         <span>No pro references for this stroke.</span>
@@ -89,7 +92,7 @@ export default function ProReferencePicker({ strokeType, selectedId, onSelect })
                 className="flex-shrink-0 w-[120px] h-[100px] rounded-xl border border-gray-800 bg-gray-900 animate-pulse"
               />
             ))
-          : references.map((ref) => {
+          : filtered.map((ref) => {
               const isSelected = ref.id === selectedId
               const isReady = ref.status === 'ready'
               // Thumbnails are in S3; no direct URL in local dev — show placeholder

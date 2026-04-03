@@ -1,8 +1,8 @@
 # Changelog
 
-## [2026-04-02] (Demo-Ready Polish - Backend)
+## [2026-04-02] (Demo-Ready Polish)
 
-### Added
+### Added (Backend)
 - `models.py`: `buggy_whip_forehand` and `slice` stroke types to `StrokeType` enum
 - Alembic migration `h3e4f6g7b890` for new stroke type enum values (PG `ALTER TYPE`)
 - `models.py`: `description` field on `ProReference` model and all related Pydantic schemas
@@ -15,10 +15,23 @@
 - `feedback_generator.py`: 4 golden rules of tennis technique and real drill methodology in system prompt
 - 9 new tests for delete/bulk-delete endpoints, 7 new tests for base score and wrist acceleration
 
+### Added (Frontend)
+- `Upload.jsx`: 3-step wizard redesign (Choose Stroke → Upload Video → Analyze)
+- `WizardStepIndicator.jsx`: horizontal step progress indicator
+- `GripSelector.jsx`: grip image cards with player headshots for forehand grip selection
+- `ProReferencePicker.jsx`: optional `filterFn` prop for grip-based player filtering
+- `History.jsx`: single and bulk delete with checkboxes, select all, confirmation dialogs
+- `ProReferenceCard.jsx`: description display (line-clamp-2) on library cards
+- `AddProReferenceModal.jsx`: description textarea in create form
+- `api.js`: `deleteAnalysis`, `bulkDeleteAnalyses`, updated `createProReference` and `updateProReference`
+
 ### Changed
 - `dtw_comparator.py`: Per-phase DTW scale factors (backswing 65.0 more forgiving, follow_through 35.0 stricter)
 - `config.py`: Frame extraction FPS default increased from 60 to 120
 - `pro_references.py`: PATCH endpoint now persists `description` field
+- `useVideoPlayback.js`: Default playback speed changed from 1.0x to 0.25x
+- `ComparisonView.jsx`: Auto-play on load when overlay data is ready
+- Frontend stroke selectors: added Buggy-Whip Forehand and Slice options
 - Test suite: 324 tests passing (was 308)
 
 ## [2026-04-02]
