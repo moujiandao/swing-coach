@@ -105,6 +105,10 @@ class Analysis(Base):
     keyframe_s3_keys: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Per-frame boolean: True where MediaPipe actually detected a pose
     detection_mask: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Per-frame YOLO racquet detection: [[base_x, base_y, tip_x, tip_y, conf], ...] or null
+    racquet_data: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Pro reference racquet data (phase-aligned to user frame count)
+    pro_racquet_data: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -318,6 +322,10 @@ class OverlayResponse(BaseModel):
     racquet_connections: list[list[int]]  # wrist→fingertip pairs (drawn thicker)
     # Per-frame boolean: True where pose was actually detected (vs interpolated)
     detection_mask: list[bool] | None = None
+    # Per-frame YOLO racquet detections: [[base_x, base_y, tip_x, tip_y, conf], ...] or null
+    racquet_data: list | None = None
+    # Pro reference racquet data (phase-aligned)
+    pro_racquet_data: list | None = None
     # Presigned URLs generated at request time for video playback
     video_url: str | None = None
     keyframe_urls: dict | None = None

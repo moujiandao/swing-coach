@@ -35,6 +35,8 @@ export default function ComparisonView({ overlayData }) {
     fps,
     landmark_connections,
     racquet_connections,
+    racquet_data,
+    pro_racquet_data,
     detection_mask,
     video_url,
     frame_mapping,
@@ -296,6 +298,8 @@ export default function ComparisonView({ overlayData }) {
               frameDeviations={frame_deviations}
               landmarkConnections={landmark_connections}
               racquetConnections={racquet_connections}
+              racquetData={racquet_data}
+              proRacquetData={pro_racquet_data}
               phaseBoundaries={phase_boundaries}
               fps={fps || 30}
               currentFrame={currentFrame}
@@ -321,7 +325,8 @@ export default function ComparisonView({ overlayData }) {
                   proLandmarks={null}
                   frameDeviations={frame_deviations}
                   landmarkConnections={landmark_connections}
-              racquetConnections={racquet_connections}
+                  racquetConnections={racquet_connections}
+                  racquetData={racquet_data}
                   phaseBoundaries={phase_boundaries}
                   fps={fps || 30}
                   currentFrame={currentFrame}
@@ -348,7 +353,8 @@ export default function ComparisonView({ overlayData }) {
                   proLandmarks={pro_landmarks}
                   frameDeviations={[]}
                   landmarkConnections={landmark_connections}
-              racquetConnections={racquet_connections}
+                  racquetConnections={racquet_connections}
+                  proRacquetData={pro_racquet_data}
                   phaseBoundaries={phase_boundaries}
                   fps={fps || 30}
                   currentFrame={currentFrame}

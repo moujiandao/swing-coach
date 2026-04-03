@@ -25,6 +25,7 @@ from app.services.s3 import download_video, upload_file
 from app.worker.feature_engine import extract_features
 from app.worker.frame_extractor import extract_frames
 from app.worker.pose_estimator import extract_poses
+from app.worker.racquet_detector import detect_racquets, serialize_detections
 from app.pro_references.loader import save_reference
 
 logger = logging.getLogger(__name__)
@@ -172,6 +173,21 @@ def process_pro_reference(reference_id: str) -> None:
             reference_id, pose_result.detection_rate * 100, time.perf_counter() - t0,
         )
 
+        # 5.5. Racquet detection (YOLO) — non-fatal
+        racquet_data_serialized: list | None = None
+        try:
+            t0 = time.perf_counter()
+            logger.info("[pro-ref %s] Running racquet detection (YOLO)", reference_id)
+            wrist_xy = pose_result.landmarks[:, 16, :2]
+            racquet_result = detect_racquets(frame_result.frame_paths, wrist_landmarks=wrist_xy)
+            racquet_data_serialized = serialize_detections(racquet_result.detections)
+            logger.info(
+                "[pro-ref %s] Racquet detection done: rate=%.0f%% (%.1fs)",
+                reference_id, racquet_result.detection_rate * 100, time.perf_counter() - t0,
+            )
+        except Exception as rq_exc:
+            logger.warning("[pro-ref %s] Racquet detection failed (non-fatal): %s", reference_id, rq_exc)
+
         # 6. Feature extraction
         t0 = time.perf_counter()
         features = extract_features(
@@ -206,6 +222,7 @@ def process_pro_reference(reference_id: str) -> None:
             landmarks=pose_result.landmarks,
             fps=fps,
             frame_count=len(frame_result.frame_paths),
+            racquet_data=racquet_data_serialized,
         )
         logger.info("[pro-ref %s] .npz saved → %s", reference_id, npz_path)
 
@@ -251,6 +268,7 @@ def _save_npz(
     landmarks: np.ndarray,
     fps: float,
     frame_count: int,
+    racquet_data: list | None = None,
 ) -> None:
     """
     Write a pro reference .npz archive.
@@ -275,5 +293,14 @@ def _save_npz(
         save_dict[f"angle_{name}"] = arr
     for name, arr in velocities.items():
         save_dict[f"velocity_{name}"] = arr
+
+    # Store YOLO racquet detections as a numpy array for .npz compatibility.
+    # Each frame is [base_x, base_y, tip_x, tip_y, conf] or all zeros if not detected.
+    if racquet_data is not None:
+        rq_arr = np.zeros((len(racquet_data), 5), dtype=np.float32)
+        for i, item in enumerate(racquet_data):
+            if item is not None:
+                rq_arr[i] = item
+        save_dict["_racquet_data"] = rq_arr
 
     np.savez(path, **save_dict)

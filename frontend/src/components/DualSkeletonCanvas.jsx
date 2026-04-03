@@ -111,6 +111,29 @@ function drawRacquet(ctx, coords, connections, color, alpha) {
   ctx.restore()
 }
 
+/**
+ * Draw a racquet line from YOLO detection data.
+ * detection is [base_x, base_y, tip_x, tip_y, confidence] in normalized [0,1] coords.
+ */
+function drawRacquetFromDetection(ctx, detection, width, height, color, alpha) {
+  if (!detection || alpha < 0.01) return
+  const [bx, by, tx, ty, conf] = detection
+  // Skip zero-confidence interpolated frames with zero coordinates
+  if (bx === 0 && by === 0 && tx === 0 && ty === 0) return
+
+  ctx.save()
+  ctx.globalAlpha = 0.85 * alpha
+  ctx.strokeStyle = color
+  ctx.lineWidth = 6
+  ctx.lineCap = 'round'
+
+  ctx.beginPath()
+  ctx.moveTo(bx * width, by * height)
+  ctx.lineTo(tx * width, ty * height)
+  ctx.stroke()
+  ctx.restore()
+}
+
 function drawDeviationHighlights(ctx, coords, frameDevs, pulseAngle) {
   const pulse = 0.5 + 0.5 * Math.sin(pulseAngle)
 
@@ -228,6 +251,8 @@ export default function DualSkeletonCanvas({
   showDeviations = true,
   alignSkeletons = false,
   racquetConnections = null,
+  racquetData = null,
+  proRacquetData = null,
   frameProgress = 0,
   isPlaying = false,
   playbackSpeed = 1.0,
@@ -306,13 +331,24 @@ export default function DualSkeletonCanvas({
     // Pro skeleton (behind user)
     if (proCoords.length) {
       drawSkeleton(ctx, proCoords, landmarkConnections || [], PRO_COLOR, true, proAlphaRef.current)
-      drawRacquet(ctx, proCoords, racquetConnections, PRO_COLOR, proAlphaRef.current)
+      // Use YOLO racquet data when available, fall back to heuristic
+      const proRq = proRacquetData?.[currentFrame]
+      if (proRq) {
+        drawRacquetFromDetection(ctx, proRq, width, height, PRO_COLOR, proAlphaRef.current)
+      } else {
+        drawRacquet(ctx, proCoords, racquetConnections, PRO_COLOR, proAlphaRef.current)
+      }
     }
 
     // User skeleton on top
     if (userCoords.length) {
       drawSkeleton(ctx, userCoords, landmarkConnections || [], USER_COLOR, false, userAlphaRef.current)
-      drawRacquet(ctx, userCoords, racquetConnections, USER_COLOR, userAlphaRef.current)
+      const userRq = racquetData?.[currentFrame]
+      if (userRq) {
+        drawRacquetFromDetection(ctx, userRq, width, height, USER_COLOR, userAlphaRef.current)
+      } else {
+        drawRacquet(ctx, userCoords, racquetConnections, USER_COLOR, userAlphaRef.current)
+      }
     }
 
     // Deviation highlights disabled in canvas — shown in the panel below instead
@@ -324,7 +360,7 @@ export default function DualSkeletonCanvas({
     drawFrameCounter(ctx, currentFrame, totalFrames, width)
   }, [
     userLandmarks, proLandmarks, frameDeviations, landmarkConnections, racquetConnections,
-    phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
+    racquetData, proRacquetData, phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
     showDeviations, alignSkeletons, detectionMask, width, height, totalFrames,
   ])
 

@@ -36,6 +36,7 @@ from app.worker.feedback_generator import generate_coaching_feedback
 from app.worker.frame_extractor import extract_frames
 from app.worker.phase_aligner import align_phases, resample_landmarks
 from app.worker.pose_estimator import extract_poses
+from app.worker.racquet_detector import detect_racquets, serialize_detections
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,8 @@ async def _write_results(
     fps: float | None = None,
     keyframe_s3_keys: dict | None = None,
     detection_mask: list | None = None,
+    racquet_data: list | None = None,
+    pro_racquet_data: list | None = None,
 ) -> None:
     async with get_session() as session:
         result = await session.execute(
@@ -151,6 +154,8 @@ async def _write_results(
         analysis.fps = fps
         analysis.keyframe_s3_keys = keyframe_s3_keys
         analysis.detection_mask = detection_mask
+        analysis.racquet_data = racquet_data
+        analysis.pro_racquet_data = pro_racquet_data
         analysis.completed_at = datetime.now(timezone.utc)
         analysis.processing_time_ms = processing_time_ms
 
@@ -223,6 +228,23 @@ def process_analysis(analysis_id: str) -> None:
             analysis_id, pose_result.detection_rate * 100, time.perf_counter() - t0,
         )
 
+        # 5.5. Racquet detection (YOLO) — non-fatal
+        racquet_data_serialized: list | None = None
+        try:
+            t0 = time.perf_counter()
+            logger.info("[%s] Running racquet detection (YOLO)", analysis_id)
+            # Pass right wrist (landmark 16) xy for base/tip orientation
+            wrist_xy = pose_result.landmarks[:, 16, :2]  # (num_frames, 2)
+            racquet_result = detect_racquets(frame_result.frame_paths, wrist_landmarks=wrist_xy)
+            # Trim to same window as pose detection
+            racquet_data_serialized = serialize_detections(racquet_result.detections)
+            logger.info(
+                "[%s] Racquet detection done: rate=%.0f%% (%.1fs)",
+                analysis_id, racquet_result.detection_rate * 100, time.perf_counter() - t0,
+            )
+        except Exception as rq_exc:
+            logger.warning("[%s] Racquet detection failed (non-fatal): %s", analysis_id, rq_exc)
+
         # 6. Feature extraction
         t0 = time.perf_counter()
         logger.info("[%s] Extracting features", analysis_id)
@@ -256,6 +278,7 @@ def process_analysis(analysis_id: str) -> None:
         # 7. Load pro reference
         t0 = time.perf_counter()
         pro_landmarks_for_storage: list | None = None
+        pro_racquet_raw: list | None = None
 
         if pro_reference_db_id is not None:
             # Preferred path: load .npz directly using the path stored on the DB record
@@ -286,6 +309,10 @@ def process_analysis(analysis_id: str) -> None:
                 # Store the raw landmarks for frontend overlay rendering
                 if "_landmarks" in data.files:
                     pro_landmarks_for_storage = data["_landmarks"].tolist()
+                # Load pro racquet detections if available
+                pro_racquet_raw = None
+                if "_racquet_data" in data.files:
+                    pro_racquet_raw = data["_racquet_data"].tolist()
                 logger.info(
                     "[%s] Pro reference loaded from DB id=%s (%.1fs)",
                     analysis_id, pro_reference_db_id, time.perf_counter() - t0,
@@ -384,6 +411,26 @@ def process_analysis(analysis_id: str) -> None:
         else:
             logger.warning("[%s] No pro landmarks available — skipping phase alignment", analysis_id)
 
+        # 9.5. Resample pro racquet data to user frame count
+        pro_racquet_data_serialized: list | None = None
+        if pro_racquet_raw is not None and pro_landmarks_np is not None:
+            try:
+                user_frame_count = pose_result.landmarks.shape[0]
+                pro_frame_count = len(pro_racquet_raw)
+                # Simple nearest-neighbor resampling using frame_mapping
+                resampled = []
+                for ui in range(user_frame_count):
+                    if frame_mapping_list and ui < len(frame_mapping_list):
+                        pi = frame_mapping_list[ui]
+                    else:
+                        pi = int(round(ui * pro_frame_count / user_frame_count))
+                    pi = min(pi, pro_frame_count - 1)
+                    resampled.append(pro_racquet_raw[pi])
+                pro_racquet_data_serialized = resampled
+                logger.info("[%s] Pro racquet data resampled to %d frames", analysis_id, user_frame_count)
+            except Exception as prq_exc:
+                logger.warning("[%s] Pro racquet data resampling failed (non-fatal): %s", analysis_id, prq_exc)
+
         # 10. Claude coaching feedback
         t0 = time.perf_counter()
         logger.info("[%s] Generating coaching feedback", analysis_id)
@@ -442,6 +489,8 @@ def process_analysis(analysis_id: str) -> None:
             fps=fps,
             keyframe_s3_keys=keyframe_s3_keys,
             detection_mask=detection_mask_list,
+            racquet_data=racquet_data_serialized,
+            pro_racquet_data=pro_racquet_data_serialized,
         ))
 
         logger.info(

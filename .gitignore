@@ -26,6 +26,10 @@ venv/
 # Data files (pro reference poses — large binary blobs)
 *.npy
 
+# ML model weights (downloaded at runtime)
+*.pt
+*.onnx
+
 # SQLite dev DB
 *.db
 *.db-journal

@@ -107,6 +107,8 @@ async def get_analysis_overlay(
         landmark_connections=LANDMARK_CONNECTIONS,
         racquet_connections=RACQUET_CONNECTIONS,
         detection_mask=analysis.detection_mask,
+        racquet_data=analysis.racquet_data,
+        pro_racquet_data=analysis.pro_racquet_data,
         video_url=generate_presigned_download_url(analysis.video_s3_key),
         keyframe_urls=_build_keyframe_urls(analysis.keyframe_s3_keys),
         pro_video_url=pro_video_url,

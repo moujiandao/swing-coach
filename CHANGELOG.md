@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-04-03] YOLO Racquet Detection
+
+### Added
+- `racquet_detector.py`: YOLOv8 nano model detects tennis racquet bounding box per frame, computes center-line (base/tip endpoints), interpolates gaps
+- `analyses.racquet_data` and `analyses.pro_racquet_data` JSON columns for per-frame racquet positions
+- Alembic migration `j5g6h8i9d012` for racquet data columns
+- `DualSkeletonCanvas`: `drawRacquetFromDetection()` renders YOLO-detected racquet line, falls back to wrist-projection heuristic when no YOLO data
+- 16 new tests for racquet detector (bbox-to-centerline, interpolation, serialization, mocked YOLO inference)
+
+### Changed
+- `tasks.py`: Racquet detection runs after pose estimation (non-fatal), results stored alongside pose data
+- `pro_reference_tasks.py`: Racquet detection runs during pro reference build, stored in .npz as `_racquet_data`
+- `OverlayResponse`: Now includes `racquet_data` and `pro_racquet_data` fields
+- `ComparisonView.jsx`: Passes racquet data to DualSkeletonCanvas in overlay and side-by-side modes
+- `pyproject.toml`: Added `ultralytics>=8.2.0` dependency
+- Test suite: 340 tests passing (was 324)
+
 ## [2026-04-02] (Demo-Ready Polish)
 
 ### Added (Backend)
