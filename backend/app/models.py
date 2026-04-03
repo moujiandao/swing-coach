@@ -141,6 +141,7 @@ class ProReference(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -213,10 +214,12 @@ class ProReferenceCreate(BaseModel):
     player_name: str
     stroke_type: StrokeType
     metadata_json: dict | None = None
+    description: str | None = None
 
 
 class ProReferenceUpdate(BaseModel):
     player_name: str
+    description: str | None = None
 
 
 class ProReferenceResponse(BaseModel):
@@ -236,6 +239,7 @@ class ProReferenceResponse(BaseModel):
     duration_seconds: float | None
     is_builtin: bool
     metadata_json: dict | None
+    description: str | None
     created_at: datetime
     processed_at: datetime | None
 
@@ -255,6 +259,7 @@ class ProReferenceListItem(BaseModel):
     thumbnail_s3_key: str | None
     video_s3_key: str | None
     is_builtin: bool
+    description: str | None = None
     created_at: datetime
     # Resolved URLs (set by the endpoint, not from DB)
     thumbnail_url: str | None = None

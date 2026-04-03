@@ -117,6 +117,7 @@ async def create_pro_reference(
         status=ProReferenceStatus.pending,
         is_builtin=False,
         metadata_json=body.metadata_json,
+        description=body.description,
         created_at=datetime.now(timezone.utc),
     )
     db.add(ref)
@@ -324,14 +325,15 @@ async def update_pro_reference(
     db: AsyncSession = Depends(get_db),
 ) -> ProReferenceResponse:
     """
-    Update the player_name of a pro reference. Blocked for built-in references.
+    Update the player_name and/or description of a pro reference.
+    Blocked for built-in references.
     """
     ref = await _get_or_404(db, reference_id)
 
     if ref.is_builtin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Built-in pro references cannot be renamed",
+            detail="Built-in pro references cannot be modified",
         )
 
     trimmed = body.player_name.strip()
@@ -342,9 +344,14 @@ async def update_pro_reference(
         )
 
     ref.player_name = trimmed
+
+    # Update description if provided (None means "not sent" since it's optional)
+    if body.description is not None:
+        ref.description = body.description
+
     await db.flush()
 
-    logger.info("Pro reference renamed — id=%s new_name=%s", reference_id, trimmed)
+    logger.info("Pro reference updated — id=%s new_name=%s", reference_id, trimmed)
     return ProReferenceResponse.model_validate(ref)
 
 
