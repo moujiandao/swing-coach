@@ -20,6 +20,7 @@ from app.worker.pose_estimator import (
     N_LANDMARKS,
     PoseEstimationResult,
     _interpolate_missing,
+    _select_primary_person,
     extract_poses,
 )
 
@@ -373,6 +374,55 @@ def test_large_gap_leaves_zeros():
     for i in range(1, 9):
         assert np.all(out_lm[i] == 0), f"Frame {i} should be zeros (large gap)"
         assert np.all(out_vis[i] == 0), f"Frame {i} visibility should be zeros"
+
+
+# ---------------------------------------------------------------------------
+# Primary player selection
+# ---------------------------------------------------------------------------
+
+
+def _make_person_landmarks(torso_size: float, offset: float = 0.0) -> list:
+    """
+    Build a list of 33 mock landmarks where the torso landmarks (11, 12, 23, 24)
+    form a square of the given size, centred at (0.5 + offset, 0.5).
+    All other landmarks sit at the centre point to avoid inflating the bbox.
+    """
+    cx, cy = 0.5 + offset, 0.5
+    half = torso_size / 2
+    lms = []
+    for i in range(N_LANDMARKS):
+        lm = MagicMock()
+        if i in (11, 23):   # left shoulder / left hip
+            lm.x, lm.y = cx - half, cy - half
+        elif i in (12, 24): # right shoulder / right hip
+            lm.x, lm.y = cx + half, cy + half
+        else:
+            lm.x, lm.y = cx, cy
+        lms.append(lm)
+    return lms
+
+
+def test_selects_larger_torso_when_two_detected():
+    """Second person has a bigger torso → should be selected as primary."""
+    small_person = _make_person_landmarks(torso_size=0.05)
+    large_person = _make_person_landmarks(torso_size=0.20)
+    pose_landmarks_list = [small_person, large_person]
+    assert _select_primary_person(pose_landmarks_list) == 1
+
+
+def test_selects_only_person_when_one_detected():
+    """Single-person list always returns index 0 (regression guard)."""
+    only_person = _make_person_landmarks(torso_size=0.15)
+    assert _select_primary_person([only_person]) == 0
+
+
+def test_primary_person_tie_goes_to_first():
+    """Equal torso sizes → first detected person wins (stable default)."""
+    # Build two persons with exactly identical torso areas using the same
+    # half-size; identical floats guarantee no rounding drift between them.
+    person_a = _make_person_landmarks(torso_size=0.10)
+    person_b = _make_person_landmarks(torso_size=0.10)  # same size, same center
+    assert _select_primary_person([person_a, person_b]) == 0
 
 
 def test_small_gap_is_interpolated():

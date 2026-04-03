@@ -84,6 +84,11 @@ N_LANDMARKS = 33
 # is optimized for ~640-1080px images; 4K frames often cause detection failure.
 _MAX_FRAME_DIMENSION = 1080
 
+# Torso landmarks used to measure person size (proxy for distance from camera).
+# Using shoulder-hip quadrilateral rather than all 33 landmarks to avoid
+# distortion from extended arms or rackets.
+_TORSO_INDICES = [11, 12, 23, 24]  # left/right shoulder, left/right hip
+
 
 # ---------------------------------------------------------------------------
 # Result type
@@ -118,6 +123,28 @@ def _ensure_model() -> str:
         urllib.request.urlretrieve(_MODEL_URL, model_path)
         logger.info("Model download complete.")
     return str(model_path)
+
+
+def _select_primary_person(pose_landmarks_list: list) -> int:
+    """
+    Return the index of the primary player: the detected person whose torso
+    occupies the largest bounding-box area (proxy for closest to camera).
+
+    When only one person is detected this always returns 0. When two players
+    are visible (e.g., opponent across the net), the nearer/larger player is
+    selected based on their shoulder-hip bounding box.
+    """
+    best_idx, best_area = 0, -1.0
+    for idx, lms in enumerate(pose_landmarks_list):
+        xs = [lms[i].x for i in _TORSO_INDICES if i < len(lms)]
+        ys = [lms[i].y for i in _TORSO_INDICES if i < len(lms)]
+        if not xs:
+            continue
+        area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+        if area > best_area:
+            best_area = area
+            best_idx = idx
+    return best_idx
 
 
 def _interpolate_missing(
@@ -204,7 +231,7 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
     options = _PoseLandmarkerOptions(
         base_options=_BaseOptions(model_asset_path=model_path),
         running_mode=_RunningMode.IMAGE,
-        num_poses=1,
+        num_poses=2,  # detect up to 2 players; primary player selected by torso size
         min_pose_detection_confidence=settings.pose_detection_confidence,
         min_pose_presence_confidence=settings.pose_presence_confidence,
     )
@@ -240,7 +267,8 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
             result = landmarker.detect(mp_image)
 
             if result.pose_landmarks:
-                lms = result.pose_landmarks[0]  # first (only) person
+                primary_idx = _select_primary_person(result.pose_landmarks)
+                lms = result.pose_landmarks[primary_idx]
                 frame_lm = np.array(
                     [[lm.x, lm.y, lm.z] for lm in lms], dtype=np.float32
                 )
