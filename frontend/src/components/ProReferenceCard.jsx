@@ -10,6 +10,8 @@ const STROKE_LABELS = {
   serve_kick: 'Kick Serve',
   serve_slice: 'Slice Serve',
   volley: 'Volley',
+  buggy_whip_forehand: 'Buggy-Whip Forehand',
+  slice: 'Slice',
 }
 
 function StatusBadge({ status }) {
@@ -260,6 +262,10 @@ export default function ProReferenceCard({ reference, onUpdate, onDelete }) {
             </span>
             <StatusBadge status={reference.status} />
           </div>
+
+          {reference.description && (
+            <p className="text-xs text-gray-400 line-clamp-2">{reference.description}</p>
+          )}
 
           {reference.status === 'failed' && reference.error_message && (
             <p className="text-[11px] text-red-400 leading-snug">{reference.error_message}</p>

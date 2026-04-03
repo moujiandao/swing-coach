@@ -12,10 +12,13 @@ const STROKE_TYPES = [
   { value: 'serve_kick', label: 'Kick Serve' },
   { value: 'serve_slice', label: 'Slice Serve' },
   { value: 'volley', label: 'Volley' },
+  { value: 'buggy_whip_forehand', label: 'Buggy-Whip Forehand' },
+  { value: 'slice', label: 'Slice' },
 ]
 
 export default function AddProReferenceModal({ onClose, onSuccess }) {
   const [playerName, setPlayerName] = useState('')
+  const [description, setDescription] = useState('')
   const [strokeType, setStrokeType] = useState('')
   const [file, setFile] = useState(null)
   const [fileError, setFileError] = useState(null)
@@ -39,7 +42,9 @@ export default function AddProReferenceModal({ onClose, onSuccess }) {
 
     try {
       // Step 1: create record + get presigned URL
-      const { reference_id, upload_url } = await createProReference(playerName.trim(), strokeType)
+      const { reference_id, upload_url } = await createProReference(
+        playerName.trim(), strokeType, null, description.trim() || null,
+      )
 
       // Step 2: upload video
       if (upload_url.startsWith('file://')) {
@@ -107,6 +112,21 @@ export default function AddProReferenceModal({ onClose, onSuccess }) {
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="e.g. Roger Federer"
               className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-[#2D8653] focus:outline-none"
+              disabled={uploadProgress != null}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. Court-level slow-mo, Australian Open 2024"
+              rows={2}
+              className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-[#2D8653] focus:outline-none resize-none"
               disabled={uploadProgress != null}
             />
           </div>

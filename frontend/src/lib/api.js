@@ -83,12 +83,14 @@ export async function getProReference(id) {
 }
 
 /** @returns {{ reference_id: string, upload_url: string, s3_key: string }} */
-export async function createProReference(playerName, strokeType, metadata) {
-  const { data } = await api.post('/api/pro-references', {
+export async function createProReference(playerName, strokeType, metadata, description) {
+  const body = {
     player_name: playerName,
     stroke_type: strokeType,
     metadata_json: metadata ?? null,
-  })
+  }
+  if (description) body.description = description
+  const { data } = await api.post('/api/pro-references', body)
   return data
 }
 
@@ -116,8 +118,11 @@ export async function getProReferenceVideoUrl(referenceId) {
 }
 
 /** @returns {ProReferenceResponse} */
-export async function updateProReference(referenceId, { player_name }) {
-  const { data } = await api.patch(`/api/pro-references/${referenceId}`, { player_name })
+export async function updateProReference(referenceId, { player_name, description }) {
+  const body = {}
+  if (player_name !== undefined) body.player_name = player_name
+  if (description !== undefined) body.description = description
+  const { data } = await api.patch(`/api/pro-references/${referenceId}`, body)
   return data
 }
 
