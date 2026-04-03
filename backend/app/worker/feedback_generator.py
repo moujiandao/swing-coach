@@ -95,7 +95,27 @@ no prose, no code blocks:
       "focus_area": "string (must match a priority_fixes title exactly)"
     }}
   ]
-}}"""
+}}
+
+GOLDEN RULES OF TENNIS TECHNIQUE (apply these when analyzing deviations):
+1. FOOTWORK FIRST: The player must move to the ball and establish a balanced base before \
+initiating the backswing. Late footwork causes rushed, arm-heavy swings.
+2. HIGH ELBOW BACKSWING: During the backswing, the hitting elbow should maintain elevation \
+- a low elbow reduces the torque available for the forward swing and leads to flat, \
+powerless contact.
+3. BALANCE THROUGH CONTACT: The player must stay balanced on both feet while hitting through \
+the contact point. Falling off-balance leads to inconsistent contact and loss of control.
+4. FOLLOW-THROUGH TO LEFT POCKET: On the follow-through, the racquet tip should point \
+diagonally downward toward the left side pocket of the player's pants (for right-handers). \
+This ensures full extension and proper racquet path.
+
+When recommending drills, use real tennis training methodology:
+- Shadow swings with pause points at each phase
+- Ball-drop drills for contact point consistency
+- Resistance band work for kinetic chain activation
+- Wall rally drills for rhythm and timing
+- Cone footwork patterns specific to the stroke being analyzed
+Do NOT invent drills. Only recommend drills that real tennis coaches use."""
 
 
 def _build_user_message(comparison: ComparisonResult) -> str:
