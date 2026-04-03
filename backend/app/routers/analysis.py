@@ -7,9 +7,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Analysis, AnalysisResponse, AnalysisStatus, LANDMARK_CONNECTIONS, RACQUET_CONNECTIONS, OverlayResponse, ProReference
+from app.models import Analysis, AnalysisResponse, AnalysisStatus, BulkDeleteRequest, LANDMARK_CONNECTIONS, RACQUET_CONNECTIONS, OverlayResponse, ProReference
 from app.services.db import get_db
-from app.services.s3 import generate_presigned_download_url, generate_presigned_urls
+from app.services.s3 import delete_object, generate_presigned_download_url, generate_presigned_urls
 
 logger = logging.getLogger(__name__)
 
@@ -156,3 +156,64 @@ async def get_history(
     )
     analyses = result.scalars().all()
     return [AnalysisResponse.model_validate(a) for a in analyses]
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/analysis/{analysis_id}
+# ---------------------------------------------------------------------------
+
+def _cleanup_s3_objects(analysis: Analysis) -> None:
+    """Best-effort deletion of S3 objects associated with an analysis."""
+    if analysis.video_s3_key:
+        try:
+            delete_object(analysis.video_s3_key)
+        except Exception:
+            logger.warning("Failed to delete video S3 object: %s", analysis.video_s3_key)
+
+    if analysis.keyframe_s3_keys:
+        for key in analysis.keyframe_s3_keys.values():
+            try:
+                delete_object(key)
+            except Exception:
+                logger.warning("Failed to delete keyframe S3 object: %s", key)
+
+
+@router.delete("/analysis/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_analysis(
+    analysis_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete an analysis record and its associated S3 objects."""
+    result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+    analysis = result.scalar_one_or_none()
+
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+
+    _cleanup_s3_objects(analysis)
+    await db.delete(analysis)
+
+    logger.info("Deleted analysis — id=%s", analysis_id)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/analysis/bulk-delete
+# ---------------------------------------------------------------------------
+
+@router.post("/analysis/bulk-delete", status_code=status.HTTP_200_OK)
+async def bulk_delete_analyses(
+    body: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Delete multiple analyses by ID. Returns the count of deleted records."""
+    deleted = 0
+    for aid in body.ids:
+        result = await db.execute(select(Analysis).where(Analysis.id == aid))
+        analysis = result.scalar_one_or_none()
+        if analysis is not None:
+            _cleanup_s3_objects(analysis)
+            await db.delete(analysis)
+            deleted += 1
+
+    logger.info("Bulk deleted %d analyses (requested %d)", deleted, len(body.ids))
+    return {"deleted": deleted}

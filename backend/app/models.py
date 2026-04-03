@@ -210,6 +210,10 @@ class AnalysisResponse(BaseModel):
         return str(v) if v is not None else None
 
 
+class BulkDeleteRequest(BaseModel):
+    ids: list[uuid.UUID]
+
+
 class ProReferenceCreate(BaseModel):
     player_name: str
     stroke_type: StrokeType
