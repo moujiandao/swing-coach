@@ -52,6 +52,7 @@ export default function ComparisonView({ overlayData }) {
   const [showHelp, setShowHelp] = useState(false)
   const [alignSkeletons, setAlignSkeletons] = useState(true)
   const [videoSource, setVideoSource] = useState('student') // 'student' | 'pro'
+  const autoPlayedRef = useRef(false)
 
   // Canvas sizing via ResizeObserver
   const containerRef = useRef(null)
@@ -91,6 +92,14 @@ export default function ComparisonView({ overlayData }) {
     stepForward,
     stepBackward,
   } = playback
+
+  // Auto-play once overlay data is loaded and has more than 1 frame
+  useEffect(() => {
+    if (!autoPlayedRef.current && totalFrames > 1 && !isPlaying) {
+      autoPlayedRef.current = true
+      togglePlayPause()
+    }
+  }, [totalFrames, isPlaying, togglePlayPause])
 
   // ---- Keyboard shortcuts ----
   useEffect(() => {

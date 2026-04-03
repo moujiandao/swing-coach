@@ -17,7 +17,7 @@ export function useVideoPlayback({ totalFrames = 1, fps = 30, phaseBoundaries = 
   const [currentFrame, setCurrentFrame] = useState(0)
   const [frameProgress, setFrameProgress] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
+  const [playbackSpeed, setPlaybackSpeed] = useState(0.25)
 
   // Always-current config for the RAF loop to read without stale closures
   const configRef = useRef({ fps, playbackSpeed, totalFrames })
