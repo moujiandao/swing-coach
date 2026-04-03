@@ -17,21 +17,24 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 ---
 
 ## Current State
-**2026-04-02** — Full-body eval polish complete (Tracks A–D from `PLAN_full_body_eval_polish.md`).
+**2026-04-03** — YOLO racquet detection feature complete on `feature/yolo-racquet-detection`.
 
-- **Track A done**: feature_engine.py now extracts 10 joint angles (added left_elbow_angle, left_arm_elevation, stance_width, head_movement) and 4 velocities (added wrist_acceleration). deviation_annotator.py updated with new JOINT_LANDMARK_MAP entries + direction labels. Head skeleton connections added to models.py.
-- **Track B done**: New `evals.py` with 9 deterministic pipeline checks, integrated into tasks.py after feedback generation. Results in `coaching_feedback.eval_passed` / `eval_issues`.
-- **Track C done**: `scripts/eval_feedback_quality.py` — offline LLM-as-judge + self-repair loop. `feedback_generator.py` gains optional `critique_context` param.
-- **Track D done**: FrameDeviationPanel groups joints by body region. Stance width delta indicator in ComparisonView. `getStanceWidthDeviation` helper in landmarks.js.
-- **Tests**: 298 passing (6 skipped), frontend builds clean.
-- **Branch**: `feature/pro-reference-v2`
+- **Demo-ready polish merged to main** (2026-04-02): 3-step upload wizard, grip selector, base score, golden rules coaching, phase score tuning, delete/bulk-delete, description field, 0.25x auto-play, frame interpolation, 120fps extraction
+- **GripSelector polished**: grip image cards with DM Serif Display font, player headshots with names, "ATP pros who use this grip" label. Google Fonts (DM Serif Display + Inter) added to index.html
+- **YOLO racquet detection** (`feature/yolo-racquet-detection` branch, not yet merged to main):
+  - New `racquet_detector.py`: YOLOv8n (COCO class 38) per-frame detection, bbox-to-centerline conversion, gap interpolation
+  - Integrated into both analysis and pro reference pipelines (non-fatal)
+  - `racquet_data` + `pro_racquet_data` JSON columns on Analysis model + Alembic migration
+  - Frontend: `drawRacquetFromDetection()` in DualSkeletonCanvas, falls back to wrist-projection heuristic when no YOLO data
+  - 16 new tests, 340 total passing (6 skipped), frontend builds clean
+- **Branch**: `feature/yolo-racquet-detection` (branched from `main`)
 
 ## Next Task
-Merge `feature/pro-reference-v2` → `main` when ready. Then:
-- Test full pipeline end-to-end with a real video: `scripts/generate_synthetic_reference.py` then `scripts/test_e2e_v2.py` — verify overlay data includes all 10 joint keys
-- Verify `FrameDeviationPanel` shows "Legs & Stance" and "Head" groups in browser
-- Run `scripts/eval_feedback_quality.py --analysis-id <uuid>` against a completed analysis to verify rubric scores print
-- Consider enabling `ENABLE_LLM_EVAL_REPAIR=true` in production after manual validation of repair quality
+1. Merge `feature/yolo-racquet-detection` → `main`
+2. Run full pipeline end-to-end with a real tennis video to validate YOLO racquet detection visually
+3. Add image assets to `frontend/public/grips/` and `frontend/public/players/` (see BUGS.md for specs)
+4. Add pro reference videos for ATP players (Sinner, Alcaraz, Federer, etc.)
+5. Remaining BUGS.md items: buggy-whip forehand + slice stroke types (backend migration done, need frontend labels), Library description field (backend done, frontend wired)
 
 ## Open Issues
 - RQ worker crashes with SIGABRT on macOS when MediaPipe runs in forked process. Workaround: `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run rq worker`
