@@ -71,10 +71,15 @@ export function alignLandmarks(landmarks, hipCenter, torsoLength, targetCenter, 
 }
 
 /**
- * Align both user and pro landmarks, apply smoothing, and convert to pixel coords.
+ * Align pro skeleton onto the user's position, keeping natural scale.
  *
- * smoothedRef.current should be { user: {hipCenter, torsoLength}, pro: {hipCenter, torsoLength} }
- * or null on first call. It is mutated in place for cross-frame smoothing.
+ * The user skeleton stays exactly where it is (matching the video). The pro
+ * skeleton is translated so its hip center matches the user's, and scaled so
+ * its torso length matches the user's. This keeps both skeletons at the
+ * player's actual size and position in the frame.
+ *
+ * smoothedRef.current stores exponentially smoothed alignment offsets to
+ * prevent jitter between frames.
  */
 export function transformLandmarksAligned(userLm, proLm, canvasWidth, canvasHeight, smoothedRef) {
   const userParams = userLm ? computeAlignmentParams(userLm) : null
@@ -88,34 +93,38 @@ export function transformLandmarksAligned(userLm, proLm, canvasWidth, canvasHeig
     }
   }
 
-  // Smooth params across frames to prevent jitter
+  // Smooth the user's hip center and torso length to prevent jitter
   const prev = smoothedRef.current
-  if (prev) {
-    for (const key of ['user', 'pro']) {
-      const raw = key === 'user' ? userParams : proParams
-      if (raw && prev[key]) {
-        raw.hipCenter[0] = prev[key].hipCenter[0] + SMOOTH_ALPHA * (raw.hipCenter[0] - prev[key].hipCenter[0])
-        raw.hipCenter[1] = prev[key].hipCenter[1] + SMOOTH_ALPHA * (raw.hipCenter[1] - prev[key].hipCenter[1])
-        raw.torsoLength = prev[key].torsoLength + SMOOTH_ALPHA * (raw.torsoLength - prev[key].torsoLength)
-      }
-    }
+  if (prev && userParams && prev.user) {
+    userParams.hipCenter[0] = prev.user.hipCenter[0] + SMOOTH_ALPHA * (userParams.hipCenter[0] - prev.user.hipCenter[0])
+    userParams.hipCenter[1] = prev.user.hipCenter[1] + SMOOTH_ALPHA * (userParams.hipCenter[1] - prev.user.hipCenter[1])
+    userParams.torsoLength = prev.user.torsoLength + SMOOTH_ALPHA * (userParams.torsoLength - prev.user.torsoLength)
+  }
+  if (prev && proParams && prev.pro) {
+    proParams.hipCenter[0] = prev.pro.hipCenter[0] + SMOOTH_ALPHA * (proParams.hipCenter[0] - prev.pro.hipCenter[0])
+    proParams.hipCenter[1] = prev.pro.hipCenter[1] + SMOOTH_ALPHA * (proParams.hipCenter[1] - prev.pro.hipCenter[1])
+    proParams.torsoLength = prev.pro.torsoLength + SMOOTH_ALPHA * (proParams.torsoLength - prev.pro.torsoLength)
   }
   smoothedRef.current = { user: userParams, pro: proParams }
 
-  const tc = DEFAULT_TARGET_CENTER
-  const ts = DEFAULT_TARGET_SCALE
+  // User skeleton: no transformation, stays at its natural position
+  const userCoords = userLm ? transformLandmarks(userLm, canvasWidth, canvasHeight) : []
 
-  const userAligned = userParams
-    ? alignLandmarks(userLm, userParams.hipCenter, userParams.torsoLength, tc, ts)
-    : userLm
-  const proAligned = proParams
-    ? alignLandmarks(proLm, proParams.hipCenter, proParams.torsoLength, tc, ts)
-    : proLm
-
-  return {
-    userCoords: userAligned ? userAligned.map(([x, y]) => [x * canvasWidth, y * canvasHeight]) : [],
-    proCoords: proAligned ? proAligned.map(([x, y]) => [x * canvasWidth, y * canvasHeight]) : [],
+  // Pro skeleton: translate to user's hip center and scale to user's torso size
+  let proCoords
+  if (proLm && proParams && userParams) {
+    const scale = userParams.torsoLength / proParams.torsoLength
+    const proAligned = proLm.map(([x, y, z]) => [
+      (x - proParams.hipCenter[0]) * scale + userParams.hipCenter[0],
+      (y - proParams.hipCenter[1]) * scale + userParams.hipCenter[1],
+      z ?? 0,
+    ])
+    proCoords = proAligned.map(([x, y]) => [x * canvasWidth, y * canvasHeight])
+  } else {
+    proCoords = proLm ? transformLandmarks(proLm, canvasWidth, canvasHeight) : []
   }
+
+  return { userCoords, proCoords }
 }
 
 /**
