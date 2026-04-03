@@ -119,7 +119,7 @@ async def test_initiate_upload_returns_201(client):
 
 
 async def test_initiate_upload_all_stroke_types(client):
-    strokes = ["forehand", "backhand_one", "backhand_two", "serve_flat", "serve_kick", "serve_slice", "volley"]
+    strokes = ["forehand", "backhand_one", "backhand_two", "serve_flat", "serve_kick", "serve_slice", "volley", "buggy_whip_forehand", "slice"]
     for stroke in strokes:
         with patch("app.routers.upload.generate_presigned_upload_url", return_value="https://s3.example.com/presigned"):
             resp = await client.post("/api/upload", json={"stroke_type": stroke})

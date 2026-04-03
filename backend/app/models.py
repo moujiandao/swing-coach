@@ -28,6 +28,8 @@ class StrokeType(str, enum.Enum):
     serve_kick = "serve_kick"
     serve_slice = "serve_slice"
     volley = "volley"
+    buggy_whip_forehand = "buggy_whip_forehand"
+    slice = "slice"
 
 
 class ProReferenceStatus(str, enum.Enum):
