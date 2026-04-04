@@ -131,7 +131,7 @@ export default function Upload() {
                     key={value}
                     type="button"
                     onClick={() => handleStrokeType(value)}
-                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200
+                    className={`cursor-pointer rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200
                       ${strokeType === value
                         ? 'border-[#2D8653] bg-[#2D8653]/20 text-white shadow-lg shadow-[#2D8653]/10'
                         : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
@@ -159,7 +159,7 @@ export default function Upload() {
                 onClick={() => setWizardStep(2)}
                 className={`flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold transition-colors
                   ${step1Complete
-                    ? 'bg-[#2D8653] text-white hover:bg-[#236b42]'
+                    ? 'cursor-pointer bg-[#2D8653] text-white hover:bg-[#236b42]'
                     : 'cursor-not-allowed bg-gray-800 text-gray-500'
                   }`}
               >
@@ -192,7 +192,7 @@ export default function Upload() {
               <button
                 type="button"
                 onClick={() => setWizardStep(1)}
-                className="flex items-center gap-2 rounded-xl border border-gray-700 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-gray-500 hover:text-white transition-colors"
+                className="cursor-pointer flex items-center gap-2 rounded-xl border border-gray-700 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-gray-500 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" /> Back
               </button>
@@ -202,7 +202,7 @@ export default function Upload() {
                 onClick={() => setWizardStep(3)}
                 className={`flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold transition-colors
                   ${step2Complete
-                    ? 'bg-[#2D8653] text-white hover:bg-[#236b42]'
+                    ? 'cursor-pointer bg-[#2D8653] text-white hover:bg-[#236b42]'
                     : 'cursor-not-allowed bg-gray-800 text-gray-500'
                   }`}
               >
@@ -260,7 +260,7 @@ export default function Upload() {
               <button
                 type="button"
                 onClick={() => setWizardStep(2)}
-                className="flex items-center gap-2 rounded-xl border border-gray-700 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-gray-500 hover:text-white transition-colors"
+                className="cursor-pointer flex items-center gap-2 rounded-xl border border-gray-700 px-5 py-2.5 text-sm font-medium text-gray-300 hover:border-gray-500 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" /> Back
               </button>
@@ -269,7 +269,7 @@ export default function Upload() {
                 disabled={!canSubmit}
                 className={`rounded-xl px-8 py-2.5 text-sm font-semibold transition-colors
                   ${canSubmit
-                    ? 'bg-[#2D8653] text-white hover:bg-[#236b42]'
+                    ? 'cursor-pointer bg-[#2D8653] text-white hover:bg-[#236b42]'
                     : 'cursor-not-allowed bg-gray-800 text-gray-500'
                   }`}
               >

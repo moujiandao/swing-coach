@@ -97,7 +97,7 @@ export default function GripSelector({ selectedGrip, onSelect }) {
             key={grip.value}
             type="button"
             onClick={() => onSelect(grip.value)}
-            className={`relative rounded-xl border overflow-hidden text-left transition-all duration-200
+            className={`cursor-pointer relative rounded-xl border overflow-hidden text-left transition-all duration-200
               ${isSelected
                 ? 'border-[#2D8653] ring-2 ring-[#2D8653]/40 bg-[#2D8653]/10'
                 : 'border-gray-700 hover:border-gray-500 bg-gray-900'
