@@ -513,7 +513,8 @@ def test_process_pro_reference_success(tmp_path):
     mock_ref.video_s3_key = "pro-references/abc/video.mp4"
     mock_ref.status = ProReferenceStatus.processing
 
-    mock_frame_result = _make_mock_frame_result(frame_paths)
+    # Use 60fps to avoid triggering landmark upsampling (threshold is 50fps)
+    mock_frame_result = _make_mock_frame_result(frame_paths, fps=60.0)
     mock_pose_result = _make_mock_pose_result(n_frames)
     mock_features = _make_mock_features(n_frames)
     mock_cv2_frame = np.zeros((240, 320, 3), dtype=np.uint8)
@@ -550,7 +551,7 @@ def test_process_pro_reference_success(tmp_path):
     assert written_args["reference_id"] == "test-reference-id-0000"
     assert written_args["npz_path"].endswith("testplayer-forehand.npz")
     assert written_args["frame_count"] == n_frames
-    assert written_args["fps"] == 30.0
+    assert written_args["fps"] == 60.0
 
 
 def test_process_pro_reference_marks_failed_on_exception():

@@ -142,7 +142,22 @@ class TestResultStructure:
         user = _make_features(_make_angles(seed=22))
         ref  = _make_reference(_make_angles(seed=22))
         result = compare_swing(user, ref, fps=30.0)
-        assert set(result.phase_scores.keys()) == set(_PHASE_NAMES)
+        # phase_scores includes the 5 standard phases plus optional swing_tempo
+        assert set(_PHASE_NAMES).issubset(set(result.phase_scores.keys()))
+        extra_keys = set(result.phase_scores.keys()) - set(_PHASE_NAMES)
+        assert extra_keys <= {"swing_tempo"}
+
+    def test_swing_tempo_fields(self):
+        user = _make_features(_make_angles(seed=40))
+        ref  = _make_reference(_make_angles(seed=41))
+        result = compare_swing(user, ref, fps=30.0)
+        if result.swing_tempo is not None:
+            assert "user_ratio" in result.swing_tempo
+            assert "pro_ratio" in result.swing_tempo
+            assert "similarity" in result.swing_tempo
+            assert result.swing_tempo["user_ratio"] > 0
+            assert result.swing_tempo["pro_ratio"] > 0
+            assert 0.0 <= result.swing_tempo["similarity"] <= 100.0
 
     def test_deviation_fields(self):
         user_angles = _make_angles(seed=30)

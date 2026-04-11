@@ -127,11 +127,16 @@ export default function ProReferencePicker({ strokeType, selectedId, onSelect, f
                     )}
                   </div>
 
-                  {/* Name */}
+                  {/* Name + description */}
                   <div className="px-2 py-1.5 text-center">
                     <p className="text-xs text-gray-300 truncate leading-tight">
                       {ref.player_name}
                     </p>
+                    {ref.description && (
+                      <p className="text-[10px] text-gray-500 truncate leading-tight mt-0.5">
+                        {ref.description}
+                      </p>
+                    )}
                   </div>
 
                   {/* Selected checkmark overlay */}

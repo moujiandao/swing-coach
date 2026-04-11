@@ -19,6 +19,7 @@ from app.worker.feature_engine import (
     compute_velocity,
     detect_phases,
     extract_features,
+    upsample_landmarks,
 )
 
 
@@ -126,47 +127,86 @@ class TestDetectPhases:
         Simulate a right-hand forehand wrist trajectory:
         - x increases slowly (preparation)
         - x decreases (backswing)
-        - x increases fast (forward swing → contact at peak speed)
+        - x increases fast (forward swing -> contact at peak speed)
         - x continues (follow-through)
-        Returns wrist_positions (N,3) and wrist_speed (N,).
+        Returns wrist_positions (N,3), wrist_speed (N,), and shoulder_rotation (N,).
         """
         t = np.linspace(0, 2 * np.pi, n)
         # Sinusoidal x: starts going forward, then backward, then fast forward
         x = np.sin(t)
         positions = np.column_stack([x, np.zeros(n), np.zeros(n)]).astype(np.float32)
         speed = compute_velocity(positions, fps=30.0)
-        return positions, speed
+        # Shoulder rotation tracks the wrist motion (rotates with the swing)
+        shoulder_rot = (20.0 * np.sin(t)).astype(np.float32)
+        return positions, speed, shoulder_rot
 
     def test_returns_five_phases(self):
-        positions, speed = self._synthetic_wrist()
-        phases, contact_frame = detect_phases(positions, speed)
+        positions, speed, shoulder_rot = self._synthetic_wrist()
+        phases, contact_frame = detect_phases(positions, speed, shoulder_rot)
         assert set(phases.keys()) == {
             "preparation", "backswing", "forward_swing", "contact", "follow_through"
         }
 
     def test_phases_non_overlapping(self):
-        positions, speed = self._synthetic_wrist()
-        phases, _ = detect_phases(positions, speed)
-        # Phases have valid start ≤ end
+        positions, speed, shoulder_rot = self._synthetic_wrist()
+        phases, _ = detect_phases(positions, speed, shoulder_rot)
+        # Phases have valid start <= end
         for name, (s, e) in phases.items():
             assert s <= e, f"Phase {name} has start > end"
 
     def test_contact_frame_near_peak_speed(self):
-        positions, speed = self._synthetic_wrist()
-        _, contact_frame = detect_phases(positions, speed)
+        positions, speed, shoulder_rot = self._synthetic_wrist()
+        _, contact_frame = detect_phases(positions, speed, shoulder_rot)
         peak = int(np.argmax(speed))
         # Contact frame should be within a few frames of peak wrist speed
         assert abs(contact_frame - peak) <= 5
 
-    def test_follow_through_ends_at_last_frame(self):
-        positions, speed = self._synthetic_wrist(n=60)
-        phases, _ = detect_phases(positions, speed)
-        assert phases["follow_through"][1] == 59
+    def test_follow_through_ends_within_bounds(self):
+        positions, speed, shoulder_rot = self._synthetic_wrist(n=60)
+        phases, _ = detect_phases(positions, speed, shoulder_rot)
+        # Follow-through ends at or before the last frame (may trim idle tail)
+        assert phases["follow_through"][1] <= 59
 
-    def test_preparation_starts_at_zero(self):
-        positions, speed = self._synthetic_wrist()
-        phases, _ = detect_phases(positions, speed)
-        assert phases["preparation"][0] == 0
+    def test_preparation_starts_within_bounds(self):
+        positions, speed, shoulder_rot = self._synthetic_wrist()
+        phases, _ = detect_phases(positions, speed, shoulder_rot)
+        # Preparation starts at or after frame 0 (may trim idle start)
+        assert phases["preparation"][0] >= 0
+
+    def test_eval_window_trims_idle_frames(self):
+        """Idle padding at start/end should be excluded from phases."""
+        # Build: 40 idle + 90 active swing + 40 idle
+        n_idle = 40
+        n_active = 90
+        n = n_idle + n_active + n_idle
+
+        # Active wrist: sinusoidal trajectory with a clear backswing-then-forward
+        # pattern. Using sin(t) starting at t=0 gives: forward -> backward -> forward
+        # which produces clear sign changes in dx for phase detection.
+        t_active = np.linspace(0, 2 * np.pi, n_active)
+        x_active = 0.5 + 0.3 * np.sin(t_active)
+        # Idle: hold at the active start/end position (0.5) so transition is smooth
+        x = np.concatenate([
+            np.full(n_idle, 0.5),
+            x_active,
+            np.full(n_idle, 0.5),
+        ])
+        positions = np.column_stack([x, np.zeros(n), np.zeros(n)]).astype(np.float32)
+        speed = compute_velocity(positions, fps=30.0)
+
+        # Shoulder rotation: flat during idle, rotating during active
+        shoulder_rot = np.concatenate([
+            np.zeros(n_idle),
+            25.0 * np.sin(t_active),
+            np.zeros(n_idle),
+        ]).astype(np.float32)
+
+        phases, _ = detect_phases(positions, speed, shoulder_rot)
+
+        # Follow-through should NOT end at last frame (idle tail trimmed)
+        assert phases["follow_through"][1] < n - 1, (
+            f"Expected idle end frames to be trimmed, got follow_through end={phases['follow_through'][1]}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -360,3 +400,113 @@ class TestNewMetrics:
         # Interior frames should have some nonzero acceleration
         accel = result.velocities["wrist_acceleration"]
         assert not np.allclose(accel[5:-5], 0.0)
+
+
+# ---------------------------------------------------------------------------
+# upsample_landmarks
+# ---------------------------------------------------------------------------
+
+class TestUpsampleLandmarks:
+    def test_doubles_frame_count_at_half_fps(self):
+        """25fps → 60fps should roughly 2.4x the frame count."""
+        n = 40
+        lm = np.random.rand(n, 33, 3).astype(np.float32)
+        result, fps = upsample_landmarks(lm, source_fps=25.0, target_fps=60.0)
+        expected_n = int(round(40 * 60.0 / 25.0))  # 96
+        assert result.shape == (expected_n, 33, 3)
+        assert fps == 60.0
+
+    def test_noop_at_high_fps(self):
+        """60fps input should return unchanged."""
+        n = 100
+        lm = np.random.rand(n, 33, 3).astype(np.float32)
+        result, fps = upsample_landmarks(lm, source_fps=60.0, target_fps=60.0)
+        assert result.shape == (n, 33, 3)
+        assert fps == 60.0
+        np.testing.assert_array_equal(result, lm)
+
+    def test_noop_above_target(self):
+        """120fps input should return unchanged (no downsampling)."""
+        n = 200
+        lm = np.random.rand(n, 33, 3).astype(np.float32)
+        result, fps = upsample_landmarks(lm, source_fps=120.0, target_fps=60.0)
+        assert fps == 120.0
+        np.testing.assert_array_equal(result, lm)
+
+    def test_preserves_endpoints(self):
+        """First and last frames should match original (interpolation property)."""
+        n = 40
+        lm = np.random.rand(n, 33, 3).astype(np.float32)
+        result, _ = upsample_landmarks(lm, source_fps=25.0, target_fps=60.0)
+        np.testing.assert_allclose(result[0], lm[0], atol=1e-5)
+        np.testing.assert_allclose(result[-1], lm[-1], atol=1e-5)
+
+    def test_coordinates_in_range(self):
+        """Output should stay in [0, 1] range."""
+        n = 40
+        lm = np.random.rand(n, 33, 3).astype(np.float32)
+        result, _ = upsample_landmarks(lm, source_fps=25.0, target_fps=60.0)
+        assert np.all(result >= 0.0)
+        assert np.all(result <= 1.0)
+
+    def test_short_sequence_uses_linear(self):
+        """N=3 frames should fall back to linear interpolation without error."""
+        lm = np.array([
+            [[0.1, 0.1, 0.0]] * 33,
+            [[0.5, 0.5, 0.0]] * 33,
+            [[0.9, 0.9, 0.0]] * 33,
+        ], dtype=np.float32)
+        result, fps = upsample_landmarks(lm, source_fps=10.0, target_fps=60.0)
+        assert result.shape[0] > 3
+        assert fps == 60.0
+
+    def test_single_frame_returns_unchanged(self):
+        """N=1 should return unchanged."""
+        lm = np.random.rand(1, 33, 3).astype(np.float32)
+        result, fps = upsample_landmarks(lm, source_fps=25.0, target_fps=60.0)
+        assert result.shape == (1, 33, 3)
+        assert fps == 25.0
+
+    def test_upsampling_increases_total_frames(self):
+        """Upsampled landmarks should have more frames for phase detection."""
+        n = 40
+        t = np.linspace(0, 2 * np.pi, n)
+        lm = np.full((n, 33, 3), 0.5, dtype=np.float32)
+        lm[:, 16, 0] = 0.5 + 0.3 * np.sin(t)
+
+        upsampled, new_fps = upsample_landmarks(lm, source_fps=25.0, target_fps=60.0)
+        assert upsampled.shape[0] > n
+        assert new_fps == 60.0
+
+    def test_realistic_trajectory_phases_improve(self):
+        """
+        A more realistic wrist trajectory (with gradual transitions) should
+        produce better phase boundaries after upsampling.
+        """
+        n = 40
+        rng = np.random.default_rng(42)
+        t = np.linspace(0, 2 * np.pi, n)
+        # Add noise to make transitions less sharp (more like real motion)
+        lm = np.full((n, 33, 3), 0.5, dtype=np.float32)
+        lm[:, 16, 0] = 0.5 + 0.3 * np.sin(t) + rng.normal(0, 0.01, n).astype(np.float32)
+
+        # Phases before upsampling
+        wrist_pos_orig = lm[:, 16, :]
+        speed_orig = compute_velocity(wrist_pos_orig, 25.0)
+        # Synthetic shoulder rotation matching wrist motion
+        shoulder_rot_orig = (20.0 * np.sin(t)).astype(np.float32)
+        phases_orig, _ = detect_phases(wrist_pos_orig, speed_orig, shoulder_rot_orig)
+        total_orig = sum(e - s + 1 for s, e in phases_orig.values())
+
+        # Phases after upsampling
+        upsampled, new_fps = upsample_landmarks(lm, source_fps=25.0, target_fps=60.0)
+        wrist_pos_up = upsampled[:, 16, :]
+        speed_up = compute_velocity(wrist_pos_up, new_fps)
+        n_up = upsampled.shape[0]
+        t_up = np.linspace(0, 2 * np.pi, n_up)
+        shoulder_rot_up = (20.0 * np.sin(t_up)).astype(np.float32)
+        phases_up, _ = detect_phases(wrist_pos_up, speed_up, shoulder_rot_up)
+        total_up = sum(e - s + 1 for s, e in phases_up.values())
+
+        # Upsampled should have more total phase frames
+        assert total_up > total_orig

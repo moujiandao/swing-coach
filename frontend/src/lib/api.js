@@ -58,6 +58,15 @@ export async function cancelAnalysis(analysisId) {
 }
 
 /**
+ * Re-run the analysis pipeline on an existing analysis.
+ * @returns {{ analysis_id: string, status: string }}
+ */
+export async function reprocessAnalysis(analysisId) {
+  const { data } = await api.post(`/api/analysis/${analysisId}/reprocess`)
+  return data
+}
+
+/**
  * Delete a single analysis and its associated S3 objects.
  * @returns {void}
  */

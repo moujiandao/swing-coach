@@ -68,6 +68,7 @@ class ComparisonResult:
     overall_score: float                    # 0-100
     phase_scores: dict[str, float]          # per-phase 0-100
     deviations: list[Deviation] = field(default_factory=list)  # worst first
+    swing_tempo: dict | None = None         # {user_ratio, pro_ratio, similarity}
 
 
 # ---------------------------------------------------------------------------
@@ -274,17 +275,81 @@ def compare_swing(
     severity_order = {"critical": 0, "moderate": 1, "minor": 2}
     all_deviations.sort(key=lambda d: severity_order.get(d.severity, 9))
 
+    # Swing tempo: backswing duration / forward swing duration
+    swing_tempo = None
+    if "backswing" in user_phases and "forward_swing" in user_phases \
+       and "backswing" in pro_phases and "forward_swing" in pro_phases:
+        u_bs = user_phases["backswing"]
+        u_fs = user_phases["forward_swing"]
+        p_bs = pro_phases["backswing"]
+        p_fs = pro_phases["forward_swing"]
+
+        u_bs_dur = u_bs[1] - u_bs[0] + 1
+        u_fs_dur = u_fs[1] - u_fs[0] + 1
+        p_bs_dur = p_bs[1] - p_bs[0] + 1
+        p_fs_dur = p_fs[1] - p_fs[0] + 1
+
+        # Need at least 3 frames in each phase for a meaningful ratio
+        min_frames = 3
+        if u_bs_dur >= min_frames and u_fs_dur >= min_frames \
+           and p_bs_dur >= min_frames and p_fs_dur >= min_frames:
+            user_ratio = u_bs_dur / u_fs_dur
+            pro_ratio = p_bs_dur / p_fs_dur
+
+            # Similarity: how close the ratios are (0-100 scale)
+            # Using exponential decay on the absolute ratio difference.
+            # Scale factor of 1.0 means a difference of 1.0 in ratios
+            # (e.g., 2.5:1 vs 3.5:1) scores ~37. Gentler than relative diff
+            # which punishes small pro ratios disproportionately.
+            ratio_diff = abs(user_ratio - pro_ratio)
+            tempo_similarity = 100.0 * math.exp(-ratio_diff / 1.0)
+
+            swing_tempo = {
+                "user_ratio": round(user_ratio, 2),
+                "pro_ratio": round(pro_ratio, 2),
+                "similarity": round(tempo_similarity, 1),
+            }
+            phase_scores["swing_tempo"] = tempo_similarity
+
+            severity = _classify_severity(tempo_similarity)
+            if severity is not None:
+                if user_ratio > pro_ratio:
+                    desc = (
+                        f"Backswing is relatively slow compared to forward swing "
+                        f"(ratio {user_ratio:.1f}:1 vs pro's {pro_ratio:.1f}:1). "
+                        f"Try a quicker takeback to better load the forward swing."
+                    )
+                else:
+                    desc = (
+                        f"Backswing is rushed relative to forward swing "
+                        f"(ratio {user_ratio:.1f}:1 vs pro's {pro_ratio:.1f}:1). "
+                        f"Slow down the takeback to build more torque."
+                    )
+                all_deviations.append(Deviation(
+                    joint="swing_tempo",
+                    phase="backswing",
+                    mean_diff_degrees=round(user_ratio - pro_ratio, 2),
+                    max_diff_degrees=round(abs(user_ratio - pro_ratio), 2),
+                    timing_offset_ms=0.0,
+                    severity=severity,
+                    description=desc,
+                ))
+                # Re-sort after adding tempo deviation
+                all_deviations.sort(key=lambda d: severity_order.get(d.severity, 9))
+
     logger.info(
-        "DTW comparison complete: overall=%.1f, phases=%s, deviations=%d",
+        "DTW comparison complete: overall=%.1f, phases=%s, deviations=%d, tempo=%s",
         overall,
         {p: f"{s:.1f}" for p, s in phase_scores.items()},
         len(all_deviations),
+        swing_tempo,
     )
 
     return ComparisonResult(
         overall_score=overall,
         phase_scores=phase_scores,
         deviations=all_deviations,
+        swing_tempo=swing_tempo,
     )
 
 
@@ -308,16 +373,18 @@ def compute_base_score(
 ) -> float:
     """
     Compute a 0-100 "base" score evaluating lower body fundamentals
-    across the entire swing (not phase-segmented).
+    within the active swing evaluation window.
 
     Compares stance_width, knee_bend, and hip_rotation from joint_angles,
     plus hip_speed from velocities, using DTW with weighted averaging.
+    Trims input series to the evaluation window defined by phase boundaries
+    so idle frames at the start/end of the video don't dilute the score.
 
     Args:
         user_features: Output of extract_features().
         pro_reference: Reference dict with "joint_angles" and "velocities".
-        user_phases: Unused, accepted for call-site consistency.
-        pro_phases: Unused, accepted for call-site consistency.
+        user_phases: User phase boundaries for trimming. Falls back to user_features.phases.
+        pro_phases: Pro phase boundaries for trimming. Falls back to pro_reference["phases"].
 
     Returns:
         Single 0-100 float.
@@ -326,6 +393,14 @@ def compute_base_score(
     user_velocities = user_features.velocities
     pro_angles: dict[str, np.ndarray] = pro_reference.get("joint_angles", {})
     pro_velocities: dict[str, np.ndarray] = pro_reference.get("velocities", {})
+
+    # Determine evaluation windows from phase boundaries
+    u_ph = user_phases or user_features.phases
+    p_ph = pro_phases or pro_reference.get("phases", {})
+    u_start = min(s for s, _ in u_ph.values()) if u_ph else 0
+    u_end = max(e for _, e in u_ph.values()) if u_ph else None
+    p_start = min(s for s, _ in p_ph.values()) if p_ph else 0
+    p_end = max(e for _, e in p_ph.values()) if p_ph else None
 
     weighted_sum = 0.0
     total_weight = 0.0
@@ -341,6 +416,11 @@ def compute_base_score(
 
         if user_series is None or pro_series is None:
             continue
+
+        # Trim to evaluation window
+        user_series = user_series[u_start: (u_end + 1) if u_end is not None else None]
+        pro_series = pro_series[p_start: (p_end + 1) if p_end is not None else None]
+
         if len(user_series) < 2 or len(pro_series) < 2:
             continue
 

@@ -1,5 +1,5 @@
-import { useRef, useEffect, useCallback } from 'react'
-import { transformLandmarks, transformLandmarksAligned, getDeviationsForFrame, getCurrentPhase } from '../lib/landmarks'
+import { useRef, useEffect, useCallback, useMemo } from 'react'
+import { transformLandmarks, transformLandmarksAligned, getDeviationsForFrame, getCurrentPhase, detectHandedness } from '../lib/landmarks'
 
 // ---------------------------------------------------------------------------
 // Color palette
@@ -64,62 +64,28 @@ function drawSkeleton(ctx, coords, connections, color, dashed, alpha) {
   ctx.restore()
 }
 
-// Shoulder indices for calculating arm length (used for racquet extension)
-const SHOULDER_FOR_WRIST = { 15: 11, 16: 12 }  // left wrist→left shoulder, right→right
-
-function drawRacquet(ctx, coords, connections, color, alpha) {
-  if (!coords.length || !connections?.length || alpha < 0.01) return
-  ctx.save()
-  ctx.globalAlpha = 0.85 * alpha
-  ctx.strokeStyle = color
-  ctx.lineWidth = 6
-  ctx.lineCap = 'round'
-
-  ctx.beginPath()
-  for (const [wristIdx, fingertipIdx] of connections) {
-    const wrist = coords[wristIdx]
-    const finger = coords[fingertipIdx]
-    if (!wrist || !finger) continue
-
-    // Direction from wrist through fingertip
-    const dx = finger[0] - wrist[0]
-    const dy = finger[1] - wrist[1]
-    const handLen = Math.sqrt(dx * dx + dy * dy)
-    if (handLen < 1) continue
-
-    // Calculate arm length (shoulder→wrist) to set racquet length
-    const shoulderIdx = SHOULDER_FOR_WRIST[wristIdx]
-    const shoulder = shoulderIdx != null ? coords[shoulderIdx] : null
-    let racquetLen
-    if (shoulder) {
-      const ax = wrist[0] - shoulder[0]
-      const ay = wrist[1] - shoulder[1]
-      racquetLen = Math.sqrt(ax * ax + ay * ay)
-    } else {
-      racquetLen = handLen * 5  // fallback
-    }
-
-    // Extend from wrist outward along the wrist→fingertip direction (2x arm length)
-    const scale = (racquetLen * 2) / handLen
-    const tipX = wrist[0] + dx * scale
-    const tipY = wrist[1] + dy * scale
-
-    ctx.moveTo(wrist[0], wrist[1])
-    ctx.lineTo(tipX, tipY)
-  }
-  ctx.stroke()
-  ctx.restore()
+// Dominant-hand wrist/elbow pairs (BlazePose indices)
+const HAND_INDICES = {
+  right: [16, 14],  // right wrist, right elbow
+  left:  [15, 13],  // left wrist, left elbow
 }
 
 /**
- * Draw a racquet line from YOLO detection data.
- * detection is [base_x, base_y, tip_x, tip_y, confidence] in normalized [0,1] coords.
+ * Draw racquet as a line extending from the dominant wrist along the forearm direction.
+ * Length = 2x the forearm (elbow→wrist) distance.
  */
-function drawRacquetFromDetection(ctx, detection, width, height, color, alpha) {
-  if (!detection || alpha < 0.01) return
-  const [bx, by, tx, ty, conf] = detection
-  // Skip zero-confidence interpolated frames with zero coordinates
-  if (bx === 0 && by === 0 && tx === 0 && ty === 0) return
+function drawRacquet(ctx, coords, color, alpha, handedness) {
+  if (!coords.length || alpha < 0.01) return
+  const [wristIdx, elbowIdx] = HAND_INDICES[handedness] || HAND_INDICES.right
+
+  const wrist = coords[wristIdx]
+  const elbow = coords[elbowIdx]
+  if (!wrist || !elbow) return
+
+  const dx = wrist[0] - elbow[0]
+  const dy = wrist[1] - elbow[1]
+  const forearmLen = Math.sqrt(dx * dx + dy * dy)
+  if (forearmLen < 1) return
 
   ctx.save()
   ctx.globalAlpha = 0.85 * alpha
@@ -128,8 +94,8 @@ function drawRacquetFromDetection(ctx, detection, width, height, color, alpha) {
   ctx.lineCap = 'round'
 
   ctx.beginPath()
-  ctx.moveTo(bx * width, by * height)
-  ctx.lineTo(tx * width, ty * height)
+  ctx.moveTo(wrist[0], wrist[1])
+  ctx.lineTo(wrist[0] + dx * 2, wrist[1] + dy * 2)
   ctx.stroke()
   ctx.restore()
 }
@@ -257,11 +223,13 @@ export default function DualSkeletonCanvas({
   isPlaying = false,
   playbackSpeed = 1.0,
   detectionMask = null,
+  anchorTo = 'user',  // 'user' or 'pro' — which skeleton stays at its natural video position
   width = 640,
   height = 360,
   videoTimeSeconds = null,  // when set, overrides currentFrame/fps for video seek (used for pro video)
 }) {
   const canvasRef = useRef(null)
+  const offscreenRef = useRef(null)
   const videoRef = useRef(null)
   const rafRef = useRef(null)
   const smoothedAlignRef = useRef(null)
@@ -278,18 +246,23 @@ export default function DualSkeletonCanvas({
 
   const totalFrames = userLandmarks?.length ?? (proLandmarks?.length ?? 0)
 
+  // Detect handedness once from all-frames wrist displacement
+  const userHand = useMemo(() => detectHandedness(userLandmarks), [userLandmarks])
+  const proHand  = useMemo(() => detectHandedness(proLandmarks),  [proLandmarks])
+
   const render = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
 
-    ctx.fillStyle = '#0f172a'
-    ctx.fillRect(0, 0, width, height)
-
-    const video = videoRef.current
-    if (video && video.readyState >= 2) {
-      ctx.drawImage(video, 0, 0, width, height)
+    // Lazy-init offscreen canvas for double buffering (avoids flashing)
+    if (!offscreenRef.current || offscreenRef.current.width !== width || offscreenRef.current.height !== height) {
+      offscreenRef.current = new OffscreenCanvas(width, height)
     }
+    const ctx = offscreenRef.current.getContext('2d')
+
+    // Clear to transparent - the video element renders underneath via CSS layering.
+    // When there's no video, the parent container's dark background shows through.
+    ctx.clearRect(0, 0, width, height)
 
     // Skip user skeleton on frames where pose was not detected (interpolated
     // data from large gaps produces garbage landmarks).
@@ -313,7 +286,7 @@ export default function DualSkeletonCanvas({
 
     let userCoords, proCoords
     if (alignSkeletons && (userLm || proLm)) {
-      const aligned = transformLandmarksAligned(userLm, proLm, width, height, smoothedAlignRef)
+      const aligned = transformLandmarksAligned(userLm, proLm, width, height, smoothedAlignRef, anchorTo)
       userCoords = aligned.userCoords
       proCoords = aligned.proCoords
     } else {
@@ -331,24 +304,13 @@ export default function DualSkeletonCanvas({
     // Pro skeleton (behind user)
     if (proCoords.length) {
       drawSkeleton(ctx, proCoords, landmarkConnections || [], PRO_COLOR, true, proAlphaRef.current)
-      // Use YOLO racquet data when available, fall back to heuristic
-      const proRq = proRacquetData?.[currentFrame]
-      if (proRq) {
-        drawRacquetFromDetection(ctx, proRq, width, height, PRO_COLOR, proAlphaRef.current)
-      } else {
-        drawRacquet(ctx, proCoords, racquetConnections, PRO_COLOR, proAlphaRef.current)
-      }
+      drawRacquet(ctx, proCoords, PRO_COLOR, proAlphaRef.current, proHand)
     }
 
     // User skeleton on top
     if (userCoords.length) {
       drawSkeleton(ctx, userCoords, landmarkConnections || [], USER_COLOR, false, userAlphaRef.current)
-      const userRq = racquetData?.[currentFrame]
-      if (userRq) {
-        drawRacquetFromDetection(ctx, userRq, width, height, USER_COLOR, userAlphaRef.current)
-      } else {
-        drawRacquet(ctx, userCoords, racquetConnections, USER_COLOR, userAlphaRef.current)
-      }
+      drawRacquet(ctx, userCoords, USER_COLOR, userAlphaRef.current, userHand)
     }
 
     // Deviation highlights disabled in canvas — shown in the panel below instead
@@ -358,13 +320,22 @@ export default function DualSkeletonCanvas({
 
     // Frame counter (top-right)
     drawFrameCounter(ctx, currentFrame, totalFrames, width)
+
+    // Blit offscreen canvas to visible canvas in one operation (no flicker)
+    const visibleCtx = canvas.getContext('2d')
+    visibleCtx.clearRect(0, 0, width, height)
+    visibleCtx.drawImage(offscreenRef.current, 0, 0)
   }, [
     userLandmarks, proLandmarks, frameDeviations, landmarkConnections, racquetConnections,
-    racquetData, proRacquetData, phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
-    showDeviations, alignSkeletons, detectionMask, width, height, totalFrames,
+    phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
+    showDeviations, alignSkeletons, anchorTo, detectionMask, width, height, totalFrames,
+    userHand, proHand,
   ])
 
   useEffect(() => { renderRef.current = render }, [render])
+
+  // Reset smoothing when anchor direction changes to avoid stale offsets
+  useEffect(() => { smoothedAlignRef.current = null }, [anchorTo])
 
   // Reset sub-frame progress when frame changes (e.g., scrubbing, stepping)
   useEffect(() => {
@@ -388,17 +359,52 @@ export default function DualSkeletonCanvas({
     return () => cancelAnimationFrame(rafRef.current)
   }, [isPlaying, fps, playbackSpeed])
 
-  // Seek video when currentFrame changes.
-  // videoTimeSeconds overrides the default calculation (used when showing pro video,
-  // where the seek target is frame_mapping[currentFrame] / pro_fps).
+  // Video playback strategy:
+  // - High speed (effective fps > 60): use native video.play() because the
+  //   browser can't seek fast enough at 60+ seeks/sec. Drift-correct only
+  //   when the video falls significantly out of sync.
+  // - Low speed (effective fps <= 60): seek frame-by-frame so video frames
+  //   stay perfectly synchronized with skeleton animation. At 0.25x with
+  //   120fps landmarks, that's only 30 seeks/sec which browsers handle fine.
+  //   Native playback at low rates causes visible lag because the browser
+  //   holds each decoded frame longer while the skeleton interpolates smoothly.
+  const useNativeVideo = isPlaying && fps * playbackSpeed > 60
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !videoSrc) return
+
+    if (useNativeVideo) {
+      video.playbackRate = playbackSpeed
+      const targetTime = videoTimeSeconds != null ? videoTimeSeconds : currentFrame / fps
+      if (Math.abs(video.currentTime - targetTime) > 0.5 / fps) {
+        video.currentTime = targetTime
+      }
+      video.play().catch(() => {})
+    } else {
+      video.pause()
+    }
+  }, [useNativeVideo, playbackSpeed, videoSrc]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync video position with skeleton frame.
   useEffect(() => {
     const video = videoRef.current
     if (!video || !videoSrc || fps <= 0) return
+
     const targetTime = videoTimeSeconds != null ? videoTimeSeconds : currentFrame / fps
-    if (Math.abs(video.currentTime - targetTime) > 0.5 / fps) {
-      video.currentTime = targetTime
+
+    if (useNativeVideo) {
+      // Native playback: only correct large drift (> 0.15s)
+      if (Math.abs(video.currentTime - targetTime) > 0.15) {
+        video.currentTime = targetTime
+      }
+    } else {
+      // Frame-by-frame seeking (paused or slow speed)
+      if (Math.abs(video.currentTime - targetTime) > 0.5 / fps) {
+        video.currentTime = targetTime
+      }
     }
-  }, [currentFrame, fps, videoSrc, videoTimeSeconds])
+  }, [currentFrame, fps, videoSrc, videoTimeSeconds, useNativeVideo])
 
   // Derive phase name for the border color (raw key, not formatted)
   let currentPhaseKey = null
@@ -420,13 +426,15 @@ export default function DualSkeletonCanvas({
       style={{
         boxShadow: `0 0 0 2px ${borderColor}`,
         transition: 'box-shadow 0.3s ease',
+        width, height,
+        background: '#0f172a',
       }}
     >
       {videoSrc && (
         <video
           ref={videoRef}
           src={videoSrc}
-          style={{ display: 'none' }}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'fill' }}
           playsInline
           muted
           preload="auto"
@@ -438,7 +446,7 @@ export default function DualSkeletonCanvas({
         width={width}
         height={height}
         className="block"
-        style={{ background: '#0f172a' }}
+        style={{ position: 'relative', zIndex: 1 }}
       />
     </div>
   )

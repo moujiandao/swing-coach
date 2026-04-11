@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwingCoach MVP - App Flow Diagram</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0e1a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    overflow-x: auto;
+  }
+
+  header {
+    text-align: center;
+    padding: 36px 20px 12px;
+  }
+  header h1 {
+    font-size: 30px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #38bdf8, #818cf8, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p {
+    color: #64748b;
+    font-size: 13px;
+    margin-top: 6px;
+  }
+
+  /* ---- Legend ---- */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 16px 20px 28px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+
+  /* ---- Canvas ---- */
+  .diagram {
+    position: relative;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* ---- Swim lanes ---- */
+  .lanes {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 0;
+  }
+
+  .lane-label {
+    padding: 20px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    writing-mode: horizontal-tb;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    border-right: 2px solid #1e293b;
+    min-height: 140px;
+  }
+
+  .lane-content {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 20px 16px;
+    min-height: 140px;
+    position: relative;
+  }
+
+  .lane-row {
+    display: contents;
+  }
+  .lane-row:nth-child(odd) .lane-content {
+    background: rgba(255,255,255,0.01);
+  }
+
+  /* ---- Nodes ---- */
+  .node {
+    position: relative;
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-width: 140px;
+    max-width: 200px;
+    text-align: center;
+    flex-shrink: 0;
+    cursor: default;
+    transition: transform 0.15s, box-shadow 0.15s;
+    z-index: 2;
+  }
+  .node:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  .node-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .node-detail {
+    font-size: 10px;
+    opacity: 0.7;
+    line-height: 1.4;
+  }
+  .node-tech {
+    display: inline-block;
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 6px;
+    opacity: 0.8;
+  }
+
+  /* Node color themes */
+  .node-user    { background: #1a1a2e; border: 1px solid #38bdf8; }
+  .node-user .node-title { color: #38bdf8; }
+  .node-user .node-tech { background: #0c4a6e; color: #7dd3fc; }
+
+  .node-frontend { background: #1a1a2e; border: 1px solid #818cf8; }
+  .node-frontend .node-title { color: #a5b4fc; }
+  .node-frontend .node-tech { background: #312e81; color: #c7d2fe; }
+
+  .node-api     { background: #1a1a2e; border: 1px solid #f472b6; }
+  .node-api .node-title { color: #f9a8d4; }
+  .node-api .node-tech { background: #701a3c; color: #fbcfe8; }
+
+  .node-worker  { background: #1a1a2e; border: 1px solid #fb923c; }
+  .node-worker .node-title { color: #fdba74; }
+  .node-worker .node-tech { background: #7c2d12; color: #fed7aa; }
+
+  .node-storage { background: #1a1a2e; border: 1px solid #34d399; }
+  .node-storage .node-title { color: #6ee7b7; }
+  .node-storage .node-tech { background: #064e3b; color: #a7f3d0; }
+
+  .node-ai      { background: #1a1a2e; border: 1px solid #c084fc; }
+  .node-ai .node-title { color: #d8b4fe; }
+  .node-ai .node-tech { background: #4a1d6a; color: #e9d5ff; }
+
+  /* ---- Arrows ---- */
+  .arrow {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .arrow-h {
+    width: 48px;
+    height: 2px;
+    position: relative;
+  }
+  .arrow-h::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 8px;
+    height: 2px;
+    background: linear-gradient(to right, var(--arrow-color, #475569), var(--arrow-color, #475569));
+  }
+  .arrow-h::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -4px;
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 8px solid var(--arrow-color, #475569);
+  }
+  .arrow-label-h {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: #64748b;
+    white-space: nowrap;
+    font-family: 'SF Mono', monospace;
+  }
+
+  /* ---- Vertical flow section ---- */
+  .vertical-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 0 16px;
+  }
+  .v-arrow {
+    width: 2px;
+    height: 32px;
+    position: relative;
+  }
+  .v-arrow::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    height: calc(100% - 8px);
+    background: var(--arrow-color, #475569);
+  }
+  .v-arrow::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -4px;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 8px solid var(--arrow-color, #475569);
+  }
+  .v-arrow-up::after {
+    top: 0;
+    bottom: auto;
+    border-top: none;
+    border-bottom: 8px solid var(--arrow-color, #475569);
+  }
+  .v-arrow-up::before {
+    top: 8px;
+  }
+
+  .v-label {
+    font-size: 9px;
+    color: #64748b;
+    font-family: 'SF Mono', monospace;
+    padding: 0 4px;
+  }
+
+  /* ---- Section titles ---- */
+  .section {
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-size: 18px;
+    font-weight: 600;
+    padding: 24px 0 8px 0;
+    color: #94a3b8;
+    border-bottom: 1px solid #1e293b;
+    margin-bottom: 16px;
+  }
+  .section-subtitle {
+    font-size: 12px;
+    color: #475569;
+    margin-top: -12px;
+    margin-bottom: 20px;
+  }
+
+  /* ---- Horizontal flow row ---- */
+  .h-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    padding: 8px 0;
+    overflow-x: auto;
+  }
+
+  /* ---- Pipeline sub-steps ---- */
+  .pipeline-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 8px 0;
+    max-width: 680px;
+  }
+  .pipeline-grid .node {
+    min-width: auto;
+    max-width: none;
+  }
+
+  /* ---- Parallel branch ---- */
+  .parallel-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 1px dashed #334155;
+    border-radius: 10px;
+    position: relative;
+  }
+  .parallel-label {
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    background: #0a0e1a;
+    padding: 0 8px;
+    font-size: 10px;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ---- Result box ---- */
+  .result-box {
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 16px 20px;
+    background: #111827;
+    max-width: 700px;
+    margin: 12px auto;
+  }
+  .result-box h4 {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+  }
+  .result-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .result-item {
+    font-family: 'SF Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .result-item-green { background: #064e3b; color: #6ee7b7; }
+  .result-item-purple { background: #312e81; color: #c7d2fe; }
+  .result-item-orange { background: #7c2d12; color: #fed7aa; }
+
+  /* ---- Phase indicator ---- */
+  .phase-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 16px 0;
+    max-width: 700px;
+  }
+  .phase-segment {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    position: relative;
+  }
+  .phase-segment::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 20%;
+    height: 60%;
+    width: 1px;
+    background: rgba(255,255,255,0.1);
+  }
+  .phase-segment:last-child::after { display: none; }
+
+  /* ---- Full-width flow sections ---- */
+  .flow-section {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    justify-content: center;
+    flex-wrap: nowrap;
+    padding: 4px 0;
+  }
+
+  .flow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* ---- Divider ---- */
+  .divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, #1e293b 20%, #1e293b 80%, transparent);
+    margin: 28px 0 8px;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ---- Tooltip ---- */
+  .tooltip {
+    position: relative;
+  }
+  .tooltip .tip-text {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+    color: #cbd5e1;
+    line-height: 1.5;
+    white-space: normal;
+    width: 220px;
+    z-index: 100;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .tooltip:hover .tip-text {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  /* ---- Number badge ---- */
+  .step-badge {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    z-index: 3;
+  }
+  .badge-blue   { background: #1e3a5f; color: #38bdf8; border: 2px solid #0a0e1a; }
+  .badge-purple { background: #312e81; color: #a5b4fc; border: 2px solid #0a0e1a; }
+  .badge-pink   { background: #701a3c; color: #f9a8d4; border: 2px solid #0a0e1a; }
+  .badge-orange { background: #7c2d12; color: #fdba74; border: 2px solid #0a0e1a; }
+  .badge-green  { background: #064e3b; color: #34d399; border: 2px solid #0a0e1a; }
+  .badge-violet { background: #4a1d6a; color: #c084fc; border: 2px solid #0a0e1a; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SwingCoach MVP - Full App Flow</h1>
+  <p>End-to-end data flow from video upload through AI coaching feedback</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#38bdf8"></div> User / Browser</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#818cf8"></div> React Frontend</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f472b6"></div> FastAPI Backend</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div> RQ Worker Pipeline</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div> Storage</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c084fc"></div> AI / Claude</div>
+</div>
+
+<div class="flow-section">
+
+  <!-- ============================== -->
+  <!--  PHASE 1: Upload               -->
+  <!-- ============================== -->
+  <div class="section-title">1. Video Upload</div>
+  <div class="section-subtitle">User records a swing and uploads through the 3-step wizard</div>
+
+  <div class="h-flow">
+    <div class="node node-user tooltip">
+      <span class="step-badge badge-blue">1</span>
+      <div class="node-title">Record Swing</div>
+      <div class="node-detail">30s max, 120fps ideal</div>
+      <div class="node-tech">MP4 / MOV</div>
+      <span class="tip-text">User records their tennis swing with a phone camera. Slow-motion (120fps) gives the best results.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#38bdf8"><span class="arrow-label-h">video file</span></div></div>
+
+    <div class="node node-frontend tooltip">
+      <span class="step-badge badge-purple">2</span>
+      <div class="node-title">Upload Wizard</div>
+      <div class="node-detail">Select stroke type, grip, pro reference</div>
+      <div class="node-tech">React + Vite</div>
+      <span class="tip-text">3-step wizard: choose stroke type (forehand/backhand/serve), select grip style, pick a pro player to compare against.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#818cf8"><span class="arrow-label-h">POST /api/upload</span></div></div>
+
+    <div class="node node-api tooltip">
+      <span class="step-badge badge-pink">3</span>
+      <div class="node-title">Upload Endpoint</div>
+      <div class="node-detail">Create Analysis record, return presigned URL</div>
+      <div class="node-tech">FastAPI</div>
+      <span class="tip-text">Creates an Analysis row in Postgres, generates an S3 presigned upload URL, returns analysis_id to the frontend.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#f472b6"><span class="arrow-label-h">presigned URL</span></div></div>
+
+    <div class="node node-storage tooltip">
+      <span class="step-badge badge-green">4</span>
+      <div class="node-title">S3 Upload</div>
+      <div class="node-detail">Video stored in bucket</div>
+      <div class="node-tech">AWS S3</div>
+      <span class="tip-text">Video uploaded directly from browser to S3 via presigned URL. Backend never touches the raw video bytes during upload.</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============================== -->
+  <!--  PHASE 2: Processing           -->
+  <!-- ============================== -->
+  <div class="section-title">2. Analysis Pipeline</div>
+  <div class="section-subtitle">Backend worker processes the video through 6 stages asynchronously</div>
+
+  <div class="h-flow">
+    <div class="node node-frontend tooltip">
+      <div class="node-title">Confirm Upload</div>
+      <div class="node-detail">POST /api/{id}/confirm</div>
+      <div class="node-tech">React</div>
+      <span class="tip-text">After S3 upload succeeds, frontend calls confirm endpoint which enqueues the RQ job.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#818cf8"><span class="arrow-label-h">enqueue job</span></div></div>
+
+    <div class="node node-storage tooltip">
+      <div class="node-title">Redis Queue</div>
+      <div class="node-detail">process_analysis(id)</div>
+      <div class="node-tech">RQ</div>
+      <span class="tip-text">Job queued in Redis. Single worker picks it up. Frontend polls GET /api/analysis/{id} every 2s for status updates.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#34d399"><span class="arrow-label-h">dequeue</span></div></div>
+
+    <div class="node node-worker tooltip">
+      <div class="node-title">Worker Process</div>
+      <div class="node-detail">Runs full pipeline</div>
+      <div class="node-tech">RQ Worker</div>
+      <span class="tip-text">Single worker process runs all 6 pipeline stages sequentially. Updates Analysis status after each stage.</span>
+    </div>
+  </div>
+
+  <!-- Worker pipeline stages -->
+  <div style="padding: 16px 0;">
+    <div class="pipeline-grid" style="margin: 0 auto;">
+      <div class="node node-worker tooltip">
+        <span class="step-badge badge-orange">A</span>
+        <div class="node-title">Frame Extraction</div>
+        <div class="node-detail">FFmpeg: video to PNGs at 30fps</div>
+        <div class="node-tech">FFmpeg</div>
+        <span class="tip-text">ffprobe detects FPS/duration, then ffmpeg extracts frames. Auto-downsamples >60fps to 30fps. Max 30s duration enforced.</span>
+      </div>
+
+      <div class="node node-worker tooltip">
+        <span class="step-badge badge-orange">B</span>
+        <div class="node-title">Pose Estimation</div>
+        <div class="node-detail">33 landmarks per frame (x, y, z)</div>
+        <div class="node-tech">MediaPipe</div>
+        <span class="tip-text">BlazePose heavy model detects 33 body landmarks per frame. Linear interpolation fills gaps. Fails if detection rate &lt;50%.</span>
+      </div>
+
+      <div class="node node-worker tooltip">
+        <span class="step-badge badge-orange">C</span>
+        <div class="node-title">Racquet Detection</div>
+        <div class="node-detail">YOLOv8 bounding boxes (non-fatal)</div>
+        <div class="node-tech">Ultralytics</div>
+        <span class="tip-text">Optional stage. YOLOv8 detects tennis racquet position per frame. If it fails, pipeline continues without racquet data.</span>
+      </div>
+
+      <div class="node node-worker tooltip">
+        <span class="step-badge badge-orange">D</span>
+        <div class="node-title">Feature Extraction</div>
+        <div class="node-detail">Joint angles, velocities, phase segmentation</div>
+        <div class="node-tech">NumPy / SciPy</div>
+        <span class="tip-text">Computes 6 joint angles + 3 velocities per frame. Segments swing into 5 phases using wrist velocity sign changes.</span>
+      </div>
+
+      <div class="node node-worker tooltip">
+        <span class="step-badge badge-orange">E</span>
+        <div class="node-title">DTW Comparison</div>
+        <div class="node-detail">Phase-segmented matching vs pro</div>
+        <div class="node-tech">tslearn</div>
+        <span class="tip-text">Each phase compared independently against pro reference via Dynamic Time Warping. Produces per-phase scores (0-100) and deviation list.</span>
+      </div>
+
+      <div class="node node-ai tooltip">
+        <span class="step-badge badge-violet">F</span>
+        <div class="node-title">Coaching Feedback</div>
+        <div class="node-detail">Structured deviation data to drills</div>
+        <div class="node-tech">Claude Sonnet</div>
+        <span class="tip-text">Claude API receives scores + deviations, returns structured JSON: summary, priority fixes, positive notes, and progressive drill plan.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline quality checks -->
+  <div class="result-box">
+    <h4>Pipeline Quality Checks (9 evals run after each analysis)</h4>
+    <div class="result-items">
+      <div class="result-item result-item-orange">phase_coverage</div>
+      <div class="result-item result-item-orange">score_range</div>
+      <div class="result-item result-item-orange">deviation_count</div>
+      <div class="result-item result-item-orange">feedback_structure</div>
+      <div class="result-item result-item-orange">drill_relevance</div>
+      <div class="result-item result-item-orange">timing_consistency</div>
+      <div class="result-item result-item-orange">landmark_quality</div>
+      <div class="result-item result-item-orange">phase_ordering</div>
+      <div class="result-item result-item-orange">severity_distribution</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============================== -->
+  <!--  PHASE 3: Results              -->
+  <!-- ============================== -->
+  <div class="section-title">3. Results Display</div>
+  <div class="section-subtitle">Frontend renders interactive analysis with skeleton overlay comparison</div>
+
+  <div class="h-flow">
+    <div class="node node-storage tooltip">
+      <div class="node-title">PostgreSQL</div>
+      <div class="node-detail">Analysis record with all results</div>
+      <div class="node-tech">Supabase</div>
+      <span class="tip-text">Stores: pose_data, phase_scores, deviations, coaching_feedback, overall_score, processing_time, overlay data.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#34d399"><span class="arrow-label-h">GET /api/analysis/{id}</span></div></div>
+
+    <div class="node node-api tooltip">
+      <div class="node-title">Analysis API</div>
+      <div class="node-detail">Returns full results + overlay data</div>
+      <div class="node-tech">FastAPI</div>
+      <span class="tip-text">Two key endpoints: /api/analysis/{id} for scores/feedback, /api/analysis/{id}/overlay for skeleton landmark data.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#f472b6"><span class="arrow-label-h">JSON response</span></div></div>
+
+    <div class="node node-frontend tooltip">
+      <div class="node-title">Analysis Page</div>
+      <div class="node-detail">Tabs: Overview, Comparison, Coaching</div>
+      <div class="node-tech">React Router</div>
+      <span class="tip-text">Polling stops when status=completed. Page renders score overview, interactive comparison view, and coaching tab with drills.</span>
+    </div>
+  </div>
+
+  <!-- Frontend component breakdown -->
+  <div style="padding: 16px 0;">
+    <div class="pipeline-grid" style="margin: 0 auto;">
+      <div class="node node-frontend tooltip">
+        <div class="node-title">ComparisonView</div>
+        <div class="node-detail">Video + skeleton overlay player</div>
+        <div class="node-tech">React Component</div>
+        <span class="tip-text">Syncs video playback with skeleton rendering. Supports speed control (0.25x-1x), frame stepping, and play/pause.</span>
+      </div>
+
+      <div class="node node-frontend tooltip">
+        <div class="node-title">DualSkeletonCanvas</div>
+        <div class="node-detail">User (green) vs Pro (blue) overlay</div>
+        <div class="node-tech">HTML5 Canvas</div>
+        <span class="tip-text">Renders both skeletons on a canvas layer over the video. Pro skeleton aligned to user's position. Racquet drawn on dominant hand.</span>
+      </div>
+
+      <div class="node node-frontend tooltip">
+        <div class="node-title">PhaseBreakdown</div>
+        <div class="node-detail">Per-phase scores with color coding</div>
+        <div class="node-tech">React Component</div>
+        <span class="tip-text">Shows 5 phase scores with color coding: green (70+), yellow (40-69), red (&lt;40). Click a phase to jump to that part of the video.</span>
+      </div>
+
+      <div class="node node-frontend tooltip">
+        <div class="node-title">CoachingFeedback</div>
+        <div class="node-detail">Priority fixes + drill plan</div>
+        <div class="node-tech">React Component</div>
+        <span class="tip-text">Displays AI-generated coaching: top 3 priority fixes with current vs target values, positive notes, and progressive drill plan.</span>
+      </div>
+
+      <div class="node node-frontend tooltip">
+        <div class="node-title">DeviationTimeline</div>
+        <div class="node-detail">Frame-by-frame deviation heatmap</div>
+        <div class="node-tech">React Component</div>
+        <span class="tip-text">Visual timeline showing where deviations occur across the swing. Click to jump to specific frames.</span>
+      </div>
+
+      <div class="node node-frontend tooltip">
+        <div class="node-title">ProReferencePicker</div>
+        <div class="node-detail">Browse and select pro comparisons</div>
+        <div class="node-tech">React Component</div>
+        <span class="tip-text">Pro library browser with skeleton previews. Select different pros to re-compare your swing against.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============================== -->
+  <!--  PHASE 4: Pro Reference        -->
+  <!-- ============================== -->
+  <div class="section-title">4. Pro Reference Pipeline</div>
+  <div class="section-subtitle">Separate pipeline for building the pro swing database</div>
+
+  <div class="h-flow">
+    <div class="node node-user tooltip">
+      <div class="node-title">Pro Video</div>
+      <div class="node-detail">Upload via Pro Library UI or CLI</div>
+      <div class="node-tech">MP4</div>
+      <span class="tip-text">Pro reference videos uploaded through the Pro Library page or via the build_pro_references.py CLI script.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#38bdf8"><span class="arrow-label-h">POST /api/pro-references</span></div></div>
+
+    <div class="node node-api tooltip">
+      <div class="node-title">Pro Reference API</div>
+      <div class="node-detail">Create record + process</div>
+      <div class="node-tech">FastAPI</div>
+      <span class="tip-text">Creates ProReference DB entity with player name, stroke type, and status tracking. Triggers processing pipeline on confirm.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#f472b6"><span class="arrow-label-h">RQ job</span></div></div>
+
+    <div class="node node-worker tooltip">
+      <div class="node-title">Pro Processing</div>
+      <div class="node-detail">Extract + pose + features</div>
+      <div class="node-tech">Same pipeline</div>
+      <span class="tip-text">Runs frame extraction, pose estimation, and feature extraction. Stores landmarks + features as .npz for fast DTW lookup.</span>
+    </div>
+
+    <div class="arrow"><div class="arrow-h" style="--arrow-color:#fb923c"><span class="arrow-label-h">.npz file</span></div></div>
+
+    <div class="node node-storage tooltip">
+      <div class="node-title">Pro Reference DB</div>
+      <div class="node-detail">Landmarks + features per pro</div>
+      <div class="node-tech">PostgreSQL + .npz</div>
+      <span class="tip-text">ProReference entity in Postgres tracks metadata. Actual landmark/feature data stored as .npz files for efficient numpy loading.</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============================== -->
+  <!--  Data storage summary          -->
+  <!-- ============================== -->
+  <div class="section-title">5. Data Layer</div>
+  <div class="section-subtitle">What lives where</div>
+
+  <div style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; padding: 8px 0;">
+    <div class="result-box" style="flex: 1; min-width: 200px; max-width: 280px;">
+      <h4 style="color: #34d399;">PostgreSQL (Supabase)</h4>
+      <div class="result-items" style="flex-direction: column; align-items: flex-start;">
+        <div class="result-item result-item-green">Analysis records</div>
+        <div class="result-item result-item-green">ProReference metadata</div>
+        <div class="result-item result-item-green">Scores + deviations (JSON)</div>
+        <div class="result-item result-item-green">Coaching feedback (JSON)</div>
+        <div class="result-item result-item-green">Pose data (JSON)</div>
+      </div>
+    </div>
+
+    <div class="result-box" style="flex: 1; min-width: 200px; max-width: 280px;">
+      <h4 style="color: #38bdf8;">AWS S3</h4>
+      <div class="result-items" style="flex-direction: column; align-items: flex-start;">
+        <div class="result-item result-item-purple">User video uploads</div>
+        <div class="result-item result-item-purple">Pro reference videos</div>
+        <div class="result-item result-item-purple">Thumbnails</div>
+      </div>
+    </div>
+
+    <div class="result-box" style="flex: 1; min-width: 200px; max-width: 280px;">
+      <h4 style="color: #fb923c;">Redis</h4>
+      <div class="result-items" style="flex-direction: column; align-items: flex-start;">
+        <div class="result-item result-item-orange">Job queue (RQ)</div>
+        <div class="result-item result-item-orange">Job status tracking</div>
+        <div class="result-item result-item-orange">Failed job registry</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="text-align: center; padding: 40px 20px; color: #334155; font-size: 11px;">
+  SwingCoach MVP - Architecture Flow Diagram - Generated 2026-04-11
+</div>
+
+</body>
+</html>

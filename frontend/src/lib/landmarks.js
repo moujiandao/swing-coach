@@ -7,13 +7,15 @@ const LEFT_HIP = 23
 const RIGHT_HIP = 24
 const LEFT_SHOULDER = 11
 const RIGHT_SHOULDER = 12
+const LEFT_WRIST = 15
+const RIGHT_WRIST = 16
 
 // Default alignment target: center of normalized space, standard torso size
 const DEFAULT_TARGET_CENTER = [0.5, 0.5]
 const DEFAULT_TARGET_SCALE = 0.25
 
 // Exponential smoothing factor (0 = no smoothing, 1 = no memory)
-const SMOOTH_ALPHA = 0.15
+const SMOOTH_ALPHA = 0.4
 
 /**
  * Convert normalized [0–1] landmark coordinates to canvas pixel coordinates.
@@ -81,7 +83,7 @@ export function alignLandmarks(landmarks, hipCenter, torsoLength, targetCenter, 
  * smoothedRef.current stores exponentially smoothed alignment offsets to
  * prevent jitter between frames.
  */
-export function transformLandmarksAligned(userLm, proLm, canvasWidth, canvasHeight, smoothedRef) {
+export function transformLandmarksAligned(userLm, proLm, canvasWidth, canvasHeight, smoothedRef, anchorTo = 'user') {
   const userParams = userLm ? computeAlignmentParams(userLm) : null
   const proParams = proLm ? computeAlignmentParams(proLm) : null
 
@@ -107,22 +109,43 @@ export function transformLandmarksAligned(userLm, proLm, canvasWidth, canvasHeig
   }
   smoothedRef.current = { user: userParams, pro: proParams }
 
-  // User skeleton: no transformation, stays at its natural position
-  const userCoords = userLm ? transformLandmarks(userLm, canvasWidth, canvasHeight) : []
+  // Determine anchor and guest based on anchorTo parameter
+  let anchorParams = anchorTo === 'pro' ? proParams : userParams
+  const anchorLm = anchorTo === 'pro' ? proLm : userLm
+  let guestParams = anchorTo === 'pro' ? userParams : proParams
+  const guestLm = anchorTo === 'pro' ? userLm : proLm
 
-  // Pro skeleton: translate to user's hip center and scale to user's torso size
-  let proCoords
-  if (proLm && proParams && userParams) {
-    const scale = userParams.torsoLength / proParams.torsoLength
-    const proAligned = proLm.map(([x, y, z]) => [
-      (x - proParams.hipCenter[0]) * scale + userParams.hipCenter[0],
-      (y - proParams.hipCenter[1]) * scale + userParams.hipCenter[1],
+  // If anchor params are null this frame (e.g. detection gap), use last-known
+  // smoothed values so the guest skeleton doesn't jump to its raw position
+  if (!anchorParams && smoothedRef.current) {
+    const prevAnchor = anchorTo === 'pro' ? smoothedRef.current.pro : smoothedRef.current.user
+    if (prevAnchor) anchorParams = prevAnchor
+  }
+  if (!guestParams && smoothedRef.current) {
+    const prevGuest = anchorTo === 'pro' ? smoothedRef.current.user : smoothedRef.current.pro
+    if (prevGuest) guestParams = prevGuest
+  }
+
+  // Anchor skeleton: no transformation, stays at its natural position
+  const anchorCoords = anchorLm ? transformLandmarks(anchorLm, canvasWidth, canvasHeight) : []
+
+  // Guest skeleton: translate to anchor's hip center and scale to anchor's torso size
+  let guestCoords
+  if (guestLm && guestParams && anchorParams) {
+    const scale = anchorParams.torsoLength / guestParams.torsoLength
+    const guestAligned = guestLm.map(([x, y, z]) => [
+      (x - guestParams.hipCenter[0]) * scale + anchorParams.hipCenter[0],
+      (y - guestParams.hipCenter[1]) * scale + anchorParams.hipCenter[1],
       z ?? 0,
     ])
-    proCoords = proAligned.map(([x, y]) => [x * canvasWidth, y * canvasHeight])
+    guestCoords = guestAligned.map(([x, y]) => [x * canvasWidth, y * canvasHeight])
   } else {
-    proCoords = proLm ? transformLandmarks(proLm, canvasWidth, canvasHeight) : []
+    guestCoords = guestLm ? transformLandmarks(guestLm, canvasWidth, canvasHeight) : []
   }
+
+  // Map back to user/pro regardless of anchor direction
+  const userCoords = anchorTo === 'pro' ? guestCoords : anchorCoords
+  const proCoords = anchorTo === 'pro' ? anchorCoords : guestCoords
 
   return { userCoords, proCoords }
 }
@@ -156,6 +179,44 @@ export function getStanceWidthDeviation(frameDeviations, frameIndex) {
     if (stanceDev != null) return stanceDev.diff_degrees
   }
   return null
+}
+
+/**
+ * Detect handedness by comparing total wrist displacement across all frames.
+ * The hitting hand moves far more than the non-hitting hand during a swing.
+ *
+ * @param {number[][][]} landmarks  All frames: [frame][landmark][x,y,z]
+ * @returns {'right'|'left'}
+ */
+export function detectHandedness(landmarks) {
+  if (!landmarks || landmarks.length < 2) return 'right'
+
+  let leftDisp = 0
+  let rightDisp = 0
+
+  for (let i = 1; i < landmarks.length; i++) {
+    const prev = landmarks[i - 1]
+    const curr = landmarks[i]
+    if (!prev || !curr) continue
+
+    const pl = prev[LEFT_WRIST]
+    const cl = curr[LEFT_WRIST]
+    if (pl && cl) {
+      const dx = cl[0] - pl[0]
+      const dy = cl[1] - pl[1]
+      leftDisp += Math.sqrt(dx * dx + dy * dy)
+    }
+
+    const pr = prev[RIGHT_WRIST]
+    const cr = curr[RIGHT_WRIST]
+    if (pr && cr) {
+      const dx = cr[0] - pr[0]
+      const dy = cr[1] - pr[1]
+      rightDisp += Math.sqrt(dx * dx + dy * dy)
+    }
+  }
+
+  return rightDisp >= leftDisp ? 'right' : 'left'
 }
 
 /**

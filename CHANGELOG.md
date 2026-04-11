@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-04-10] Documentation Cleanup
+
+### Changed
+- Restructure CLAUDE.md: trim from 345 to ~215 lines, update Current State and Next Task to reflect actual branch state, replace 84-line file tree with directory-level overview, fix stale references (removed nonexistent useUpload.js and SkeletonOverlay.jsx, corrected test file names, updated test count to 357+)
+- Move pipeline data flow and API schema details from CLAUDE.md to new `docs/ARCHITECTURE.md` with updated fields (all 10 joint angle keys, 4 velocity keys, racquet data, detection mask, pipeline evals step)
+- Update README.md: add Features section, add YOLO racquet detection and pipeline evals to architecture diagram, clarify deployment as planned not live, summarize test coverage
+- Replace BUGS.md: archive original (80% resolved) to `docs/archive/`, create fresh file with only open items (phase score tuning, drill quality, skeleton smoothness)
+- Archive completed planning docs (SPRINT_PLAN.md, SHIP_PLAN.md, FEATURE_SPEC_V2.md, PLAN_full_body_eval_polish.md) to `docs/archive/`
+
 ## [2026-04-03] YOLO Racquet Detection
 
 ### Added

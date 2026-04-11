@@ -147,6 +147,42 @@ async def cancel_analysis(
     return {"analysis_id": str(analysis_id), "status": "failed"}
 
 
+@router.post("/analysis/{analysis_id}/reprocess", status_code=status.HTTP_200_OK)
+async def reprocess_analysis(
+    analysis_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Re-run the analysis pipeline on an existing analysis using its original video."""
+    result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+    analysis = result.scalar_one_or_none()
+
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+
+    if analysis.status == AnalysisStatus.processing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Analysis is already processing",
+        )
+
+    if not analysis.video_s3_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No video associated with this analysis",
+        )
+
+    # Reset to processing and re-enqueue
+    analysis.status = AnalysisStatus.processing
+    analysis.error_message = None
+    await db.flush()
+
+    from app.routers.upload import _enqueue_analysis_job
+    _enqueue_analysis_job(str(analysis_id))
+
+    logger.info("Analysis reprocessing — id=%s", analysis_id)
+    return {"analysis_id": str(analysis_id), "status": "processing"}
+
+
 @router.get("/history", response_model=list[AnalysisResponse], status_code=status.HTTP_200_OK)
 async def get_history(
     limit: int = Query(default=20, ge=1, le=100),

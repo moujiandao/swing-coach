@@ -472,11 +472,16 @@ def process_analysis(analysis_id: str) -> None:
 
         processing_time_ms = int((time.perf_counter() - t_start) * 1000)
 
+        # Include swing tempo detail in phase_scores for frontend access
+        final_phase_scores = dict(comparison.phase_scores)
+        if comparison.swing_tempo:
+            final_phase_scores["swing_tempo_detail"] = comparison.swing_tempo
+
         # 12. Write completed results to DB
         asyncio.run(_write_results(
             analysis_id=analysis_id,
             pose_data=pose_data_serializable,
-            phase_scores=comparison.phase_scores,
+            phase_scores=final_phase_scores,
             deviations=deviations_serializable,
             coaching_feedback=coaching_dict,
             overall_score=comparison.overall_score,

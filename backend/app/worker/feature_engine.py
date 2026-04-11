@@ -8,6 +8,7 @@ import logging
 from dataclasses import dataclass, field
 
 import numpy as np
+from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 
 from app.models import StrokeType
@@ -112,15 +113,78 @@ def compute_velocity(positions: np.ndarray, fps: float) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Landmark temporal upsampling
+# ---------------------------------------------------------------------------
+
+_UPSAMPLE_FPS_THRESHOLD = 50.0
+_UPSAMPLE_TARGET_FPS = 120.0
+
+
+def upsample_landmarks(
+    landmarks: np.ndarray,
+    source_fps: float,
+    target_fps: float = _UPSAMPLE_TARGET_FPS,
+) -> tuple[np.ndarray, float]:
+    """
+    Upsample a (N, 33, 3) landmark array from source_fps to target_fps
+    using cubic spline interpolation along the time axis.
+
+    Returns (upsampled_landmarks, effective_fps). If source_fps >= target_fps
+    or N < 2, returns the input unchanged.
+    """
+    n = landmarks.shape[0]
+    if source_fps >= target_fps or n < 2:
+        return landmarks, source_fps
+
+    scale = target_fps / source_fps
+    new_n = int(round(n * scale))
+    if new_n <= n:
+        return landmarks, source_fps
+
+    t_old = np.linspace(0.0, 1.0, n)
+    t_new = np.linspace(0.0, 1.0, new_n)
+
+    # Reshape to (N, 99) for vectorized interpolation
+    flat = landmarks.reshape(n, -1)
+
+    # Cubic spline requires >= 4 points; fall back to linear for very short sequences
+    kind = "cubic" if n >= 4 else "linear"
+    interpolator = interp1d(t_old, flat, axis=0, kind=kind, fill_value="extrapolate")
+    upsampled_flat = interpolator(t_new)
+
+    # Clamp to [0, 1] - cubic spline can overshoot normalized coordinates
+    upsampled_flat = np.clip(upsampled_flat, 0.0, 1.0)
+
+    upsampled = upsampled_flat.reshape(new_n, landmarks.shape[1], landmarks.shape[2])
+    logger.info(
+        "Upsampled landmarks: %d → %d frames (%.1f → %.1f fps, method=%s)",
+        n, new_n, source_fps, target_fps, kind,
+    )
+    return upsampled.astype(np.float32), target_fps
+
+
+# ---------------------------------------------------------------------------
 # Phase detection
 # ---------------------------------------------------------------------------
+
+# Evaluation window thresholds (tune with real swing data)
+_SHOULDER_TURN_THRESHOLD = 0.3   # deg/frame: minimum angular velocity to count as active rotation
+_DECEL_FRACTION = 0.15           # fraction of peak wrist speed below which follow-through ends
+
 
 def detect_phases(
     wrist_positions: np.ndarray,   # (N, 3)
     wrist_speed: np.ndarray,       # (N,) smoothed scalar speed
+    shoulder_rotation: np.ndarray, # (N,) degrees, shoulder line angle per frame
 ) -> tuple[dict[str, tuple[int, int]], int]:
     """
     Segment the swing into 5 phases and identify the contact frame.
+
+    The evaluation window is trimmed to the active swing:
+    - Starts at shoulder turn initiation (first significant shoulder rotation
+      before the backswing), excluding idle frames at the beginning.
+    - Ends when wrist speed drops below 15% of peak after contact, excluding
+      recovery/idle frames at the end.
 
     Returns:
         phases: dict mapping phase name → (start, end) frame indices (inclusive)
@@ -130,14 +194,11 @@ def detect_phases(
     contact_frame = int(np.argmax(wrist_speed))
 
     # --- backswing_start: last sign-change of wrist x-velocity before contact ---
-    # A positive x-velocity means wrist moving right (forward for right-hander);
-    # we look for the transition from positive→negative (wrist starts moving away).
     wrist_x = wrist_positions[:, 0]
     dx = np.diff(wrist_x, prepend=wrist_x[0])  # length N
 
     backswing_start = 0
     for i in range(contact_frame - 1, 0, -1):
-        # sign flip: was moving one direction, then the other
         if dx[i] * dx[i - 1] < 0:
             backswing_start = i
             break
@@ -155,15 +216,39 @@ def detect_phases(
 
     follow_through_start = contact_frame_clamped + 1
 
+    # --- eval_start: shoulder turn initiation ---
+    # Smoothed derivative of shoulder rotation to find first significant movement.
+    d_shoulder = np.gradient(shoulder_rotation)
+    sw = min(7, n if n % 2 == 1 else n - 1)
+    sw = max(sw, 3)
+    d_shoulder_smooth = savgol_filter(
+        d_shoulder, window_length=sw, polyorder=min(2, sw - 1),
+    )
+
+    eval_start = 0  # fallback: shoulder was turning from the very start
+    for i in range(backswing_start - 1, -1, -1):
+        if abs(d_shoulder_smooth[i]) < _SHOULDER_TURN_THRESHOLD:
+            eval_start = i + 1
+            break
+
+    # --- eval_end: wrist deceleration after contact ---
+    peak_speed = wrist_speed[contact_frame]
+    speed_threshold = peak_speed * _DECEL_FRACTION
+    eval_end = n - 1  # fallback
+    for i in range(follow_through_start, n):
+        if wrist_speed[i] < speed_threshold:
+            eval_end = i
+            break
+
     phases: dict[str, tuple[int, int]] = {
-        "preparation":   (0,                       max(0, backswing_start - 1)),
+        "preparation":   (eval_start,              max(eval_start, backswing_start - 1)),
         "backswing":     (backswing_start,          forward_swing_start - 1),
         "forward_swing": (forward_swing_start,      contact_frame_clamped),
         "contact":       (max(0, contact_frame_clamped - 1), min(n - 1, contact_frame_clamped + 1)),
-        "follow_through":(follow_through_start,    n - 1),
+        "follow_through":(follow_through_start,    eval_end),
     }
 
-    # Clamp every phase so start ≤ end, both within [0, n-1]
+    # Clamp every phase so start <= end, both within [0, n-1]
     phases = {
         k: (max(0, min(s, e, n - 1)), min(n - 1, max(s, e)))
         for k, (s, e) in phases.items()
@@ -284,7 +369,7 @@ def extract_features(
     }
 
     # --- Phase detection ---
-    phases, contact_frame = detect_phases(hit_wrist, wrist_speed)
+    phases, contact_frame = detect_phases(hit_wrist, wrist_speed, shoulder_rotation)
 
     logger.info(
         "Features extracted: %d frames, contact at frame %d, phases=%s",

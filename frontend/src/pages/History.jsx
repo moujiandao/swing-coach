@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Trash2 } from 'lucide-react'
-import { getHistory, cancelAnalysis, deleteAnalysis, bulkDeleteAnalyses } from '../lib/api'
+import { Trash2, RotateCcw } from 'lucide-react'
+import { getHistory, cancelAnalysis, deleteAnalysis, bulkDeleteAnalyses, reprocessAnalysis } from '../lib/api'
 
 const STATUS_BADGE = {
   completed:  'bg-green-900/40 text-green-400 border-green-800',
@@ -44,10 +44,11 @@ function SkeletonCard() {
   )
 }
 
-function HistoryCard({ analysis, onClick, onCancel, onDelete, isSelected, onToggleSelect }) {
+function HistoryCard({ analysis, onClick, onCancel, onDelete, onReprocess, isSelected, onToggleSelect }) {
   const { status, stroke_type, pro_reference, overall_score, created_at } = analysis
   const badgeClass = STATUS_BADGE[status] ?? STATUS_BADGE.pending
   const cancellable = status === 'processing' || status === 'pending'
+  const reprocessable = status === 'completed' || status === 'failed'
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   return (
@@ -92,6 +93,18 @@ function HistoryCard({ analysis, onClick, onCancel, onDelete, isSelected, onTogg
               className="rounded-lg border border-red-800 bg-red-900/30 px-2 py-0.5 text-xs font-medium text-red-400 hover:bg-red-900/60 transition-colors"
             >
               Cancel
+            </button>
+          )}
+          {/* Reprocess button */}
+          {reprocessable && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onReprocess(analysis.id) }}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-[#2D8653] hover:bg-[#2D8653]/10 transition-colors cursor-pointer"
+              aria-label="Reprocess analysis"
+              title="Reprocess"
+            >
+              <RotateCcw className="h-4 w-4" />
             </button>
           )}
           {/* Individual delete button */}
@@ -154,6 +167,19 @@ export default function History() {
       )
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to cancel analysis')
+    }
+  }
+
+  const handleReprocess = async (analysisId) => {
+    try {
+      await reprocessAnalysis(analysisId)
+      setAnalyses((prev) =>
+        prev.map((a) =>
+          a.id === analysisId ? { ...a, status: 'processing', error_message: null } : a
+        )
+      )
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to reprocess analysis')
     }
   }
 
@@ -302,6 +328,7 @@ export default function History() {
               onClick={() => navigate(`/analysis/${a.id}`)}
               onCancel={handleCancel}
               onDelete={handleDelete}
+              onReprocess={handleReprocess}
               isSelected={selectedIds.has(a.id)}
               onToggleSelect={toggleSelect}
             />

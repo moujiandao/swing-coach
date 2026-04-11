@@ -95,6 +95,48 @@ async def _mark_pro_reference_failed(reference_id: str, error: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Racquet data upsampling helper
+# ---------------------------------------------------------------------------
+
+def _upsample_racquet_data(racquet_data: list, target_len: int) -> list:
+    """
+    Upsample racquet detection data to match upsampled landmark frame count.
+    Uses linear interpolation for coordinates, sets confidence to 0.0 for
+    interpolated frames to distinguish them from real detections.
+    """
+    n = len(racquet_data)
+    if n == target_len or n < 2:
+        return racquet_data
+
+    # Convert to numpy: each frame is [base_x, base_y, tip_x, tip_y, conf] or None
+    arr = np.zeros((n, 5), dtype=np.float32)
+    for i, item in enumerate(racquet_data):
+        if item is not None:
+            arr[i] = item
+
+    t_old = np.linspace(0.0, 1.0, n)
+    t_new = np.linspace(0.0, 1.0, target_len)
+
+    # Interpolate coordinates (first 4 columns) linearly
+    from scipy.interpolate import interp1d
+    coord_interp = interp1d(t_old, arr[:, :4], axis=0, kind="linear")
+    new_coords = coord_interp(t_new)
+
+    # Confidence: only keep original-frame confidence, set interpolated to 0.0
+    new_conf = np.zeros(target_len, dtype=np.float32)
+    for i in range(n):
+        nearest = int(round(i * (target_len - 1) / (n - 1)))
+        new_conf[nearest] = arr[i, 4]
+
+    result = []
+    for i in range(target_len):
+        result.append([float(new_coords[i, 0]), float(new_coords[i, 1]),
+                        float(new_coords[i, 2]), float(new_coords[i, 3]),
+                        float(new_conf[i])])
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Thumbnail helper
 # ---------------------------------------------------------------------------
 
@@ -188,11 +230,34 @@ def process_pro_reference(reference_id: str) -> None:
         except Exception as rq_exc:
             logger.warning("[pro-ref %s] Racquet detection failed (non-fatal): %s", reference_id, rq_exc)
 
+        # 5.7. Upsample landmarks if source fps is low (< 50fps)
+        # Low-fps videos produce degenerate phase boundaries (e.g., 1-frame backswing).
+        # Cubic spline interpolation to 60fps gives the phase detector enough data points.
+        landmarks_for_features = pose_result.landmarks
+        effective_fps = fps
+        original_frame_count = len(frame_result.frame_paths)
+        if fps < 50.0:
+            from app.worker.feature_engine import upsample_landmarks
+            landmarks_for_features, effective_fps = upsample_landmarks(
+                pose_result.landmarks, source_fps=fps,
+            )
+            logger.info(
+                "[pro-ref %s] Upsampled landmarks: %d → %d frames (%.1f → %.1f fps)",
+                reference_id, pose_result.landmarks.shape[0],
+                landmarks_for_features.shape[0], fps, effective_fps,
+            )
+
+            # Also upsample racquet data to match new frame count
+            if racquet_data_serialized is not None:
+                racquet_data_serialized = _upsample_racquet_data(
+                    racquet_data_serialized, landmarks_for_features.shape[0],
+                )
+
         # 6. Feature extraction
         t0 = time.perf_counter()
         features = extract_features(
-            landmarks=pose_result.landmarks,
-            fps=fps,
+            landmarks=landmarks_for_features,
+            fps=effective_fps,
             stroke_type=stroke_type,
             handedness="right",
         )
@@ -219,10 +284,12 @@ def process_pro_reference(reference_id: str) -> None:
             joint_angles=features.joint_angles,
             velocities=features.velocities,
             phases=features.phases,
-            landmarks=pose_result.landmarks,
-            fps=fps,
-            frame_count=len(frame_result.frame_paths),
+            landmarks=landmarks_for_features,
+            fps=effective_fps,
+            frame_count=landmarks_for_features.shape[0],
             racquet_data=racquet_data_serialized,
+            original_fps=fps if fps < 50.0 else None,
+            original_frame_count=original_frame_count if fps < 50.0 else None,
         )
         logger.info("[pro-ref %s] .npz saved → %s", reference_id, npz_path)
 
@@ -231,8 +298,8 @@ def process_pro_reference(reference_id: str) -> None:
             reference_id=reference_id,
             npz_path=npz_path,
             thumbnail_s3_key=thumbnail_s3_key,
-            frame_count=len(frame_result.frame_paths),
-            fps=fps,
+            frame_count=landmarks_for_features.shape[0],
+            fps=effective_fps,
             duration_seconds=duration_seconds,
         ))
 
@@ -269,6 +336,8 @@ def _save_npz(
     fps: float,
     frame_count: int,
     racquet_data: list | None = None,
+    original_fps: float | None = None,
+    original_frame_count: int | None = None,
 ) -> None:
     """
     Write a pro reference .npz archive.
@@ -289,6 +358,10 @@ def _save_npz(
         "_fps": np.float64(fps),
         "_frame_count": np.int64(frame_count),
     }
+    if original_fps is not None:
+        save_dict["_original_fps"] = np.float64(original_fps)
+    if original_frame_count is not None:
+        save_dict["_original_frame_count"] = np.int64(original_frame_count)
     for name, arr in joint_angles.items():
         save_dict[f"angle_{name}"] = arr
     for name, arr in velocities.items():

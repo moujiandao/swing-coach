@@ -127,6 +127,14 @@ def _build_user_message(comparison: ComparisonResult) -> str:
     for phase, score in comparison.phase_scores.items():
         lines.append(f"  {phase}: {score:.1f}")
 
+    if comparison.swing_tempo:
+        t = comparison.swing_tempo
+        lines.append("")
+        lines.append("Swing tempo (backswing duration / forward swing duration):")
+        lines.append(f"  Player ratio: {t['user_ratio']:.2f}:1")
+        lines.append(f"  Pro ratio:    {t['pro_ratio']:.2f}:1")
+        lines.append(f"  Similarity:   {t['similarity']:.1f}/100")
+
     lines.append("")
     if comparison.deviations:
         lines.append(f"Detected deviations ({len(comparison.deviations)} total, worst first):")

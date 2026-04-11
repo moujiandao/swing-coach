@@ -4,6 +4,23 @@ AI-powered tennis swing analysis. Upload a video of your swing, get coaching fee
 
 ---
 
+## Features
+
+- **3-step upload wizard**: Choose stroke type and grip, select a pro reference, upload video
+- **Grip-based pro matching**: Semi-Western, Modified Eastern, Eastern, Western grip selection filters available pro references with player headshots
+- **Full-body pose analysis**: 10 joint angles + 4 velocity metrics extracted via MediaPipe BlazePose (33 landmarks)
+- **Phase-segmented DTW comparison**: Preparation, backswing, forward swing, contact, follow-through scored independently against pro reference
+- **Base score**: Dedicated lower body scoring (stance width, knee bend, hip rotation)
+- **YOLO racquet detection**: Per-frame racquet position tracking with fallback to wrist-projection heuristic
+- **Skeleton overlay**: Dual-skeleton canvas (user in cyan, pro in gold) with deviation glow highlights synced to video playback
+- **Frame-accurate scrubber**: Step through frames, jump between phases, adjustable playback speed (0.25x/0.5x/1x)
+- **AI coaching feedback**: Claude-generated coaching advice with 4 golden rules of tennis, priority fixes, and drill plans
+- **Pipeline quality checks**: 9 deterministic eval checks + optional LLM-as-judge feedback quality scoring
+- **Pro reference library**: Upload and manage pro swing references with status tracking and skeleton preview
+- **Analysis history**: View past analyses with delete/bulk-delete support
+
+---
+
 ## Architecture
 
 ```
@@ -16,6 +33,8 @@ FastAPI (Python)
     ├── GET  /api/analysis/{id}        → poll for results
     ├── GET  /api/analysis/{id}/overlay → overlay dataset for canvas rendering
     ├── GET  /api/history              → past analyses
+    ├── DELETE /api/analysis/{id}      → delete single analysis
+    ├── POST /api/analysis/bulk-delete → delete multiple analyses
     ├── POST /api/pro-references       → presigned S3 URL + ProReference record
     ├── POST /api/pro-references/{id}/confirm → enqueue pro reference RQ job
     ├── GET  /api/pro-references       → list available pro references
@@ -26,17 +45,20 @@ Redis Queue (RQ) Worker
     ├── Analysis pipeline (tasks.py):
     │   ├── FFmpeg          → extract frames (PNG) from video
     │   ├── MediaPipe       → 33 body landmarks per frame → numpy array (N, 33, 3)
-    │   ├── Feature Engine  → joint angles, velocities, phase segmentation
+    │   ├── YOLO            → racquet detection per frame (non-fatal)
+    │   ├── Feature Engine  → 10 joint angles, 4 velocities, phase segmentation
     │   ├── DTW Comparator  → compare against pro reference (.npz)
     │   ├── Phase Aligner   → per-phase frame mapping + aligned pro landmarks
     │   ├── Deviation Annotator → per-frame joint deviation severity
+    │   ├── Pipeline Evals  → 9 deterministic quality checks
     │   └── Claude API      → structured coaching feedback (JSON)
     │
     └── Pro Reference pipeline (pro_reference_tasks.py):
         ├── FFmpeg          → extract frames
         ├── MediaPipe       → landmarks
+        ├── YOLO            → racquet detection (non-fatal)
         ├── Feature Engine  → angles, velocities, phases
-        └── np.savez        → .npz file (landmarks + features)
+        └── np.savez        → .npz file (landmarks + features + racquet)
     │
     ▼ (store)
 PostgreSQL (Supabase) ← analysis records + overlay data + pro reference metadata
@@ -96,8 +118,8 @@ redis-server
 # Terminal 2
 cd backend && uv run uvicorn app.main:app --reload
 
-# Terminal 3
-cd backend && uv run python run_worker.py
+# Terminal 3 (macOS requires the env var to prevent SIGABRT in forked MediaPipe processes)
+cd backend && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run rq worker --with-scheduler
 
 # Terminal 4
 cd frontend && npm run dev
@@ -161,7 +183,7 @@ uv run python ../scripts/build_pro_references.py \
 # Creates: app/pro_references/data/federer_forehand.npz
 ```
 
-Supported stroke values: `forehand`, `backhand_one`, `backhand_two`, `serve_flat`, `serve_kick`, `serve_slice`, `volley`
+Supported stroke values: `forehand`, `backhand_one`, `backhand_two`, `serve_flat`, `serve_kick`, `serve_slice`, `volley`, `buggy_whip_forehand`, `slice`
 
 ---
 
@@ -194,19 +216,14 @@ After an analysis completes, the **Comparison View** shows your swing overlaid o
 
 ```bash
 cd backend
-uv run pytest tests/ -v
+uv run pytest tests/ -v    # 357+ tests
 ```
 
-Individual test files:
-- `tests/test_frame_extractor.py` - FFmpeg frame extraction
-- `tests/test_pose_estimator.py` - MediaPipe pose detection
-- `tests/test_feature_engine.py` - Joint angles and phase detection
-- `tests/test_dtw_comparator.py` - DTW comparison and scoring
-- `tests/test_feedback_generator.py` - Claude API (skipped without API key)
+Test coverage spans all pipeline stages: frame extraction, pose estimation, feature engine, DTW comparison, phase alignment, deviation annotation, racquet detection, pipeline evals, feedback generation, overlay API, pro reference API, upload/analysis endpoints, keyframe extraction, and model/DB operations.
 
 ---
 
-## Deployment
+## Deployment (planned, not yet live)
 
 ### Railway (backend + worker)
 
@@ -243,6 +260,7 @@ Set `VITE_API_URL` to your Railway backend URL in Vercel env vars, or use the Ve
 | Backend API | FastAPI, uvicorn, Python 3.11 |
 | Task queue | Redis + RQ |
 | Pose estimation | MediaPipe BlazePose (CPU) |
+| Racquet detection | YOLOv8 nano via ultralytics (CPU) |
 | Sequence matching | DTW via tslearn |
 | Coaching feedback | Anthropic Claude API |
 | Database | PostgreSQL via Supabase (SQLite for local dev) |

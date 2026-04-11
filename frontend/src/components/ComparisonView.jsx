@@ -310,6 +310,7 @@ export default function ComparisonView({ overlayData }) {
               showProSkeleton={showPro}
               showDeviations={showDeviations}
               alignSkeletons={alignSkeletons}
+              anchorTo={videoSource === 'pro' ? 'pro' : 'user'}
               detectionMask={detection_mask}
               width={overlayWidth}
               height={overlayHeight}

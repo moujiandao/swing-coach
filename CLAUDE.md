@@ -17,58 +17,90 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 ---
 
 ## Current State
-**2026-04-03** — YOLO racquet detection feature complete on `feature/yolo-racquet-detection`.
+**2026-04-11** - Starting Angle-Invariant Swing Analysis Sprint on `feature/skeleton-overlay-clarity`.
 
-- **Demo-ready polish merged to main** (2026-04-02): 3-step upload wizard, grip selector, base score, golden rules coaching, phase score tuning, delete/bulk-delete, description field, 0.25x auto-play, frame interpolation, 120fps extraction
-- **GripSelector polished**: grip image cards with DM Serif Display font, player headshots with names, "ATP pros who use this grip" label. Google Fonts (DM Serif Display + Inter) added to index.html
-- **YOLO racquet detection** (`feature/yolo-racquet-detection` branch, not yet merged to main):
-  - New `racquet_detector.py`: YOLOv8n (COCO class 38) per-frame detection, bbox-to-centerline conversion, gap interpolation
-  - Integrated into both analysis and pro reference pipelines (non-fatal)
-  - `racquet_data` + `pro_racquet_data` JSON columns on Analysis model + Alembic migration
-  - Frontend: `drawRacquetFromDetection()` in DualSkeletonCanvas, falls back to wrist-projection heuristic when no YOLO data
-  - 16 new tests, 340 total passing (6 skipped), frontend builds clean
-- **Branch**: `feature/yolo-racquet-detection` (branched from `main`)
+- **On main**: Demo-ready polish (2026-04-02) + YOLO racquet detection (2026-04-03) + full-body eval expansion. All merged.
+- **Active branch** (`feature/skeleton-overlay-clarity`): Uncommitted skeleton overlay improvements across backend and frontend. This branch will also carry the angle-invariant sprint work.
+- **Test suite**: 357+ tests, frontend builds clean.
+
+## Active Sprint: Angle-Invariant Swing Analysis (claude-bridge #1426)
+
+**Problem**: User video filmed at a different camera angle than the pro reference produces misleading DTW scores and misaligned skeleton overlays. Current scoring uses raw XY landmark positions, which are camera-angle-dependent.
+
+### Phase 1 - Joint-Angle Feature Extraction (scoring fix, no new models)
+1. Create `angle_features.py` - extract joint angles from 2D landmarks (elbow flexion, shoulder abduction/rotation, hip rotation, knee bend, wrist deviation, trunk tilt)
+2. Create `angle_utils.py` - helpers: compute_angle_3pt, compute_segment_angle, angular_velocity
+3. Refactor `dtw_comparator.py` - add `distance_mode` param ('landmark' | 'angle'), keep landmark as fallback
+4. Tune `forgiveness_scales` for angle-based distances (different numeric range)
+5. Add tests for angle extraction + DTW angle mode stability across camera rotations
+6. Wire into pipeline (angle mode default, landmark mode behind feature flag)
+7. Validate against existing golden dataset
+
+### Phase 2 - 3D Pose Lifting & Canonical Overlay
+1. Switch MediaPipe to emit `world_landmarks` (3D) alongside 2D in `pose_extractor.py`
+2. Create `pose_canonicalizer.py` - pelvis-centered, facing-direction-normalized 3D coords
+3. Add 'canonical_3d' distance mode to DTW comparator
+4. Create `projection.py` - orthographic projection from canonical 3D back to 2D for overlay
+5. Update `DualSkeletonCanvas.jsx` - accept projected canonical landmarks, add "Angle-Normalized View" toggle
+6. Update `transformLandmarksAligned` in `landmarks.js` for canonical mode
+7. Tests + end-to-end integration test
+
+### Sprint Decisions
+- Joint-angle features first (Phase 1) because it fixes scoring immediately with zero new dependencies
+- MediaPipe world_landmarks for 3D (Phase 2) rather than external models like VideoPose3D - keeps deps small
+- Landmark-based DTW stays as fallback behind feature flag, not deleted
+- Orthographic projection for canonical overlay (simpler than perspective, sufficient for coaching)
+- No custom model training - pretrained MediaPipe 3D is sufficient
+
+### Open Questions
+- How stable are MediaPipe world_landmarks across different camera angles? May need benchmarking.
+- Should angular velocity be in DTW feature vector or kept as separate metric?
+- Does canonical projection lose depth cues that matter for coaching (e.g., racquet angle toward/away)?
+- Performance impact of 3D pose extraction on worker pipeline latency
 
 ## Next Task
-1. Merge `feature/yolo-racquet-detection` → `main`
-2. Run full pipeline end-to-end with a real tennis video to validate YOLO racquet detection visually
-3. Add image assets to `frontend/public/grips/` and `frontend/public/players/` (see BUGS.md for specs)
-4. Add pro reference videos for ATP players (Sinner, Alcaraz, Federer, etc.)
-5. Remaining BUGS.md items: buggy-whip forehand + slice stroke types (backend migration done, need frontend labels), Library description field (backend done, frontend wired)
+1. Commit existing skeleton-overlay-clarity work (uncommitted changes on branch)
+2. Begin Phase 1, Step 1: Create `angle_features.py` and `angle_utils.py`
+3. Then Phase 1, Step 3: Refactor `dtw_comparator.py` to support angle distance mode
 
 ## Open Issues
 - RQ worker crashes with SIGABRT on macOS when MediaPipe runs in forked process. Workaround: `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run rq worker`
-- Stance width deviation threshold is 10° (same as angles) — semantically wrong for normalized distance. When you have real swing data, tune the threshold (e.g., 0.05 normalized units) in `deviation_annotator.py:_DEFAULT_THRESHOLD_DEGREES`
-- Head movement direction label uses `diff_degrees` field even though the value is a signed y-offset, not degrees. Acceptable per plan Decision 1 (Option B)
+- Stance width deviation threshold is 10 degrees (same as angles) - semantically wrong for normalized distance. Tune the threshold (e.g., 0.05 normalized units) in `deviation_annotator.py:_DEFAULT_THRESHOLD_DEGREES` when real swing data is available
+- Head movement direction label uses `diff_degrees` field even though the value is a signed y-offset, not degrees. Accepted per PLAN Decision 1 (Option B)
 
 ## What This Is
 
-AI-powered tennis swing analysis app. Users upload video of their swing → backend extracts body pose with MediaPipe → compares against pre-computed pro reference swings using Dynamic Time Warping → Claude API generates coaching feedback with specific drills. Web app (React) + iOS (React Native/Expo, phase 2).
+AI-powered tennis swing analysis app. Users upload video of their swing, the backend extracts body pose with MediaPipe, compares against pre-computed pro reference swings using Dynamic Time Warping, and the Claude API generates coaching feedback with specific drills. Web app (React) + iOS (React Native/Expo, phase 2).
 
 ## Architecture
 
 ```
 React Frontend (Vite + Tailwind)
-       ↓ upload video
+       | upload video
 FastAPI Backend
-       ↓ enqueue job
-Redis Queue (RQ) → Worker Process
-       ├── FFmpeg: extract frames
-       ├── MediaPipe: 33 landmarks per frame → numpy array
-       ├── Feature extraction: joint angles, velocities, phase segmentation
-       ├── DTW comparison: phase-segmented against pro reference DB
-       └── Claude API: structured deviation data → coaching feedback
-       ↓ store results
+       | enqueue job
+Redis Queue (RQ) -> Worker Process
+       |-- FFmpeg: extract frames
+       |-- MediaPipe: 33 landmarks per frame -> numpy array
+       |-- YOLO: racquet detection per frame (non-fatal)
+       |-- Feature extraction: 10 joint angles, 4 velocities, phase segmentation
+       |-- DTW comparison: phase-segmented against pro reference DB
+       |-- Phase alignment + deviation annotation
+       |-- Pipeline evals: 9 deterministic quality checks
+       +-- Claude API: structured deviation data -> coaching feedback
+       | store results
 PostgreSQL (Supabase) + S3 (videos/frames)
 ```
+
+For detailed pipeline data flow and API schemas, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tech Stack
 
 - **Backend**: Python 3.11+, FastAPI, uvicorn
-- **Task queue**: Redis + RQ (Redis Queue) — NOT Celery (too heavy for MVP)
-- **CV pipeline**: mediapipe, opencv-python, numpy, scipy
-- **DTW**: tslearn (or fastdtw for simpler API)
-- **Feedback**: anthropic Python SDK (Claude claude-sonnet-4-20250514)
+- **Task queue**: Redis + RQ (Redis Queue) - NOT Celery (too heavy for MVP)
+- **CV pipeline**: mediapipe, opencv-python, numpy, scipy, ultralytics (YOLOv8)
+- **DTW**: tslearn
+- **Feedback**: anthropic Python SDK (claude-sonnet-4-20250514)
 - **Storage**: Supabase (PostgreSQL + auth), AWS S3 (video uploads)
 - **Frontend**: React 18, Vite, Tailwind CSS, React Router
 - **Deployment**: Railway (backend + worker), Vercel (frontend)
@@ -77,88 +109,39 @@ PostgreSQL (Supabase) + S3 (videos/frames)
 
 ```
 swing-coach-mvp/
-├── CLAUDE.md                    # This file
-├── SPRINT_PLAN.md               # Task breakdown for execution
-├── FEATURE_SPEC_V2.md           # V2 feature spec (Pro Library + Overlay)
+├── CLAUDE.md                        # This file
+├── BUGS.md                          # Open issues
 ├── backend/
-│   ├── pyproject.toml           # Dependencies (use uv)
 │   ├── app/
-│   │   ├── main.py              # FastAPI app, CORS, lifespan
-│   │   ├── config.py            # Settings via pydantic-settings
-│   │   ├── models.py            # SQLAlchemy/Pydantic models (Analysis + ProReference)
-│   │   ├── routers/
-│   │   │   ├── upload.py        # POST /api/upload (presigned URL + job enqueue)
-│   │   │   ├── analysis.py      # GET /api/analysis/{id}, /overlay, GET /api/history
-│   │   │   ├── pro_references.py # CRUD + confirm + preview + reprocess for ProReference
-│   │   │   └── health.py        # GET /api/health
-│   │   ├── worker/
-│   │   │   ├── tasks.py              # RQ task: full analysis pipeline
-│   │   │   ├── pro_reference_tasks.py # RQ task: pro reference build pipeline
-│   │   │   ├── frame_extractor.py    # FFmpeg frame extraction
-│   │   │   ├── pose_estimator.py     # MediaPipe pose extraction
-│   │   │   ├── feature_engine.py     # Joint angles, velocities, phase segmentation
-│   │   │   ├── dtw_comparator.py     # DTW comparison against pro DB
-│   │   │   ├── phase_aligner.py      # Phase-aligned frame mapping (user ↔ pro)
-│   │   │   ├── deviation_annotator.py # Per-frame joint deviation annotation
-│   │   │   └── feedback_generator.py # Claude API coaching feedback
-│   │   ├── services/
-│   │   │   ├── s3.py            # S3 upload/download helpers
-│   │   │   └── db.py            # Database session management
-│   │   └── pro_references/
-│   │       ├── loader.py        # Load pre-computed pro pose data (.npz)
-│   │       └── data/            # .npz files of pro swing landmarks
-│   └── tests/
-│       ├── test_pose_estimator.py
-│       ├── test_feature_engine.py
-│       ├── test_dtw_comparator.py
-│       ├── test_phase_aligner.py
-│       ├── test_deviation_annotator.py
-│       ├── test_pro_references.py   # API endpoint tests
-│       └── fixtures/            # Sample video clips for testing
+│   │   ├── main.py                  # FastAPI app, CORS, lifespan
+│   │   ├── config.py                # Settings via pydantic-settings
+│   │   ├── models.py                # SQLAlchemy/Pydantic models (Analysis + ProReference)
+│   │   ├── routers/                 # API endpoints (upload, analysis, pro_references, health)
+│   │   ├── worker/                  # Pipeline stages: frame_extractor, pose_estimator,
+│   │   │                            #   feature_engine, dtw_comparator, phase_aligner,
+│   │   │                            #   deviation_annotator, feedback_generator,
+│   │   │                            #   racquet_detector, evals
+│   │   ├── services/                # S3, DB helpers
+│   │   └── pro_references/          # .npz loader + data files
+│   ├── tests/                       # pytest suite (357+ tests)
+│   ├── run_worker.py                # RQ worker entry point
+│   └── Dockerfile
 ├── frontend/
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
 │   ├── src/
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   ├── pages/
-│   │   │   ├── Upload.jsx       # Video upload with pro reference picker
-│   │   │   ├── Analysis.jsx     # Results display (skeleton + overlay + feedback)
-│   │   │   ├── History.jsx      # Past analyses list
-│   │   │   └── ProLibrary.jsx   # Pro reference library (upload + manage)
-│   │   ├── components/
-│   │   │   ├── VideoUploader.jsx
-│   │   │   ├── SkeletonOverlay.jsx      # Single-skeleton canvas (legacy)
-│   │   │   ├── DualSkeletonCanvas.jsx   # Dual-skeleton canvas with deviation overlay
-│   │   │   ├── SkeletonLegend.jsx       # Color legend for dual skeleton
-│   │   │   ├── VideoScrubber.jsx        # Frame-accurate scrubber with phase regions
-│   │   │   ├── PhaseTimeline.jsx        # Horizontal phase timeline bar
-│   │   │   ├── ComparisonView.jsx       # Main comparison UI (canvas + scrubber + panels)
-│   │   │   ├── DeviationTimeline.jsx    # Severity timeline across all frames
-│   │   │   ├── FrameDeviationPanel.jsx  # Per-frame joint deviation detail
-│   │   │   ├── KeyboardShortcutsHelp.jsx # ? key overlay
-│   │   │   ├── PhaseBreakdown.jsx       # Per-phase score breakdown
-│   │   │   ├── CoachingFeedback.jsx     # Claude-generated advice
-│   │   │   ├── ProReferenceCard.jsx     # Card for pro library grid
-│   │   │   ├── AddProReferenceModal.jsx # Upload form modal
-│   │   │   └── ProReferencePicker.jsx   # Dropdown on Upload page
-│   │   ├── hooks/
-│   │   │   ├── useUpload.js         # Upload + polling logic
-│   │   │   ├── useAnalysis.js       # Fetch analysis results
-│   │   │   ├── useVideoPlayback.js  # Frame-stepping, play/pause, keyboard shortcuts
-│   │   │   └── useOverlayData.js    # Fetch + parse /overlay endpoint
-│   │   └── lib/
-│   │       ├── api.js           # Axios/fetch wrapper
-│   │       └── landmarks.js     # Landmark transform + deviation helpers
-│   └── public/
-└── scripts/
-    ├── build_pro_references.py       # Process pro video → .npz pose data (legacy CLI)
-    ├── generate_synthetic_reference.py
-    ├── migrate_static_references.py  # Import existing .npz files into ProReference DB table
-    ├── test_e2e.py                   # V1 pipeline e2e test
-    ├── test_e2e_v2.py                # V2 e2e test (pro library + overlay)
-    └── dev_setup.sh                  # Dev environment bootstrap
+│   │   ├── pages/                   # Upload (3-step wizard), Analysis, History, ProLibrary
+│   │   ├── components/              # DualSkeletonCanvas, ComparisonView, VideoScrubber,
+│   │   │                            #   GripSelector, PhaseBreakdown, CoachingFeedback,
+│   │   │                            #   DeviationTimeline, FrameDeviationPanel, etc.
+│   │   ├── hooks/                   # useAnalysis, useVideoPlayback, useOverlayData
+│   │   └── lib/                     # api.js, landmarks.js
+│   ├── public/                      # Grip images, player headshots
+│   └── Dockerfile
+├── scripts/                         # CLI tools, e2e tests, dev setup
+├── docs/
+│   ├── ARCHITECTURE.md              # Detailed pipeline data flow and API schemas
+│   ├── archive/                     # Completed plans (SPRINT_PLAN, SHIP_PLAN, FEATURE_SPEC_V2, etc.)
+│   └── pipeline-diagram.html        # Interactive pipeline visualization
+└── docker-compose.yml
 ```
 
 ## Key Conventions
@@ -177,91 +160,11 @@ swing-coach-mvp/
 - **Phase-segmented DTW over whole-swing DTW**: Comparing entire swings masks which *part* of the swing is wrong. Segmenting into backswing/forward/contact/followthrough gives actionable coaching data.
 - **Claude for feedback over rule-based**: Rule-based feedback is brittle and generic. Claude can synthesize multiple deviations into coherent coaching advice with progressive drills. The prompt engineering IS the product differentiation.
 - **Supabase over raw Postgres**: Free tier includes auth + Postgres + row-level security. We get user management for free. Migrate to standalone Postgres later if needed.
-- **Client-side canvas overlay over server-side video compositing**: More interactive (scrub, toggle, zoom), less compute, and the existing SkeletonOverlay.jsx pattern made this the natural extension. Server-side compositing would require storing rendered videos per-analysis, adding storage costs and removing interactivity.
+- **Client-side canvas overlay over server-side video compositing**: More interactive (scrub, toggle, zoom), less compute. DualSkeletonCanvas renders both user and pro skeletons on a canvas synced to video playback. Server-side compositing would require storing rendered videos per-analysis, adding storage costs and removing interactivity.
 - **Phase-aligned resampling over raw frame mapping**: Each phase is independently resampled so that a user's slower backswing doesn't cause misalignment in the forward swing. Raw duration-proportional mapping compounds timing errors across phases.
 - **ProReference as a first-class DB entity over file-system convention**: Enables user uploads, status tracking, thumbnails, and future sharing features. Static .npz files in a directory have no metadata, no ownership, and no pipeline status.
 - **OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES for RQ worker on macOS**: RQ uses fork() to spawn work-horse processes. MediaPipe/OpenCV triggers macOS Objective-C runtime abort (SIGABRT/signal 6) in forked children. This env var disables that check. Not needed in production (Linux/Railway).
 - **Separate local upload endpoints per entity type**: `/api/upload/local/{id}` handles Analysis uploads, `/api/pro-references/local/{id}` handles ProReference uploads. They look up different DB tables, so they cannot share an endpoint.
-
-## Pipeline Data Flow
-
-### Pro Reference Upload Pipeline (Tasks 3.x)
-
-```
-User uploads pro video via Pro Library UI
-  ↓
-POST /api/pro-references → create ProReference record (status=pending) + presigned S3 URL
-  ↓
-POST /api/pro-references/{id}/confirm → enqueue RQ job (status=processing)
-  ↓
-RQ Worker (pro_reference_tasks.py):
-  FFmpeg → frames
-  MediaPipe → landmarks (N, 33, 3)
-  Feature Engine → joint_angles, velocities, phases
-  cv2 → thumbnail JPEG → S3
-  np.savez → .npz (landmarks + features + metadata) → local data/ dir
-  DB update → status=ready, npz_path, frame_count, fps
-```
-
-### Analysis Pipeline (full flow with overlay)
-
-```
-Input: MP4/MOV video (max 30s, ideally 120fps slow-mo)
-  ↓
-FFmpeg → frames/ directory (PNG files at native FPS)
-  ↓
-MediaPipe → pose_landmarks: np.ndarray, shape (num_frames, 33, 3)
-  ↓
-Feature Engine →
-  joint_angles: dict[str, np.ndarray]  # per-joint angle timeseries
-    keys: elbow_angle, shoulder_rotation, hip_rotation, knee_bend, racket_arm_elevation, trunk_rotation
-  velocities: dict[str, np.ndarray]    # per-joint velocity timeseries
-  phases: dict[str, tuple[int, int]]   # frame ranges per phase
-    keys: preparation, backswing, forward_swing, contact, follow_through
-  ↓ (keyframe JPEGs extracted at phase boundaries → S3)
-  ↓
-Pro Reference Loader → load .npz (DB-backed path or filesystem fallback)
-  ↓
-DTW Comparator →
-  overall_score: float (0-100, higher = more similar to pro)
-  phase_scores: dict[str, float]       # per-phase similarity
-  deviations: list[Deviation]          # ranked list of biggest differences
-    Deviation: {joint, phase, angle_diff, timing_diff, description}
-  ↓
-Phase Aligner (phase_aligner.py) →
-  frame_mapping: list[int]             # user_frame → pro_frame (per-phase linear interp)
-  phase_boundaries: dict[str, PhaseBoundary]  # tempo_ratio per phase
-  aligned_pro_landmarks: np.ndarray    # pro landmarks resampled to user frame count
-  ↓
-Deviation Annotator (deviation_annotator.py) →
-  frame_deviations: list[FrameDeviation]  # per-frame joint annotations (severity, direction)
-  ↓
-Claude Feedback →
-  summary: str                         # 2-3 sentence overview
-  priority_fixes: list[Fix]            # top 3 things to work on
-    Fix: {title, explanation, drill, difficulty}
-  positive_notes: list[str]            # what's going well
-  ↓
-DB write: pose_data, aligned_pro_landmarks, frame_mapping, frame_deviations,
-          phase_boundaries, fps, keyframe_s3_keys, coaching_feedback
-```
-
-### Overlay Endpoint (GET /api/analysis/{id}/overlay)
-
-```
-DB → Analysis record
-  ↓
-Return OverlayResponse:
-  user_landmarks: list[frame][landmark][x,y,z]
-  pro_landmarks: list[frame][landmark][x,y,z]   # phase-aligned, same frame count
-  frame_mapping: list[int]
-  frame_deviations: list[FrameDeviation]
-  phase_boundaries: dict[str, PhaseBoundary]
-  fps: float
-  landmark_connections: list[list[int]]          # bone pairs for skeleton drawing
-  video_url: str | None                          # presigned S3 URL
-  keyframe_urls: dict[str, str] | None           # phase → presigned S3 URL
-```
 
 ## Do Not
 
@@ -275,7 +178,7 @@ Return OverlayResponse:
 - Do NOT use `print()` for logging. Use Python `logging` module with structured output.
 - Do NOT hardcode pro player names or stroke types. Use enums and a config-driven reference loader so the pro DB is extensible.
 - Do NOT render composite videos server-side. All overlay rendering happens client-side on canvas. Server-side compositing adds compute, storage, and removes interactivity.
-- Do NOT send pro reference video to the frontend for side-by-side display. Use animated skeleton rendering from landmarks instead — the pro video may not be licensed for user-facing display.
+- Do NOT send pro reference video to the frontend for side-by-side display. Use animated skeleton rendering from landmarks instead - the pro video may not be licensed for user-facing display.
 
 ## Common Commands
 
