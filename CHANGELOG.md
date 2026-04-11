@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026-04-11] v0.2.0 Release
+
+### Summary
+Merge `feature/skeleton-overlay-clarity` into `main` and tag `v0.2.0`. Clean baseline for angle-invariant swing analysis sprint.
+
+### Added
+- Automatic handedness detection from wrist motion analysis
+- Evaluation window trimming via shoulder turn and arm deceleration detection
+- Expanded feature engine with shoulder turn detection
+- `docs/ARCHITECTURE.md` with detailed pipeline data flow
+- `docs/app-flow-diagram.html` interactive flow visualization
+- Pro player headshots and grip technique images
+
+### Changed
+- Skeleton overlay renders racquet only on dominant hand
+- Documentation restructured (FEATURE_SPEC_V2 archived, BUGS.md refreshed)
+- CLAUDE.md trimmed and updated for sprint readiness
+
 ## [2026-04-10] Documentation Cleanup
 
 ### Changed

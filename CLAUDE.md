@@ -17,11 +17,11 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 ---
 
 ## Current State
-**2026-04-11** - Starting Angle-Invariant Swing Analysis Sprint on `feature/skeleton-overlay-clarity`.
+**2026-04-11** - v0.2.0 released on `main`. Clean baseline for Angle-Invariant Swing Analysis Sprint.
 
-- **On main**: Demo-ready polish (2026-04-02) + YOLO racquet detection (2026-04-03) + full-body eval expansion. All merged.
-- **Active branch** (`feature/skeleton-overlay-clarity`): Uncommitted skeleton overlay improvements across backend and frontend. This branch will also carry the angle-invariant sprint work.
+- **v0.2.0** includes: skeleton overlay clarity, handedness detection, evaluation window trimming, expanded feature engine, documentation restructure, YOLO racquet detection, demo-ready polish.
 - **Test suite**: 357+ tests, frontend builds clean.
+- **Ready to start**: Phase 1 of angle-invariant sprint (new feature branch needed).
 
 ## Active Sprint: Angle-Invariant Swing Analysis (claude-bridge #1426)
 
@@ -59,7 +59,7 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 - Performance impact of 3D pose extraction on worker pipeline latency
 
 ## Next Task
-1. Commit existing skeleton-overlay-clarity work (uncommitted changes on branch)
+1. Create feature branch `feature/angle-invariant-scoring`
 2. Begin Phase 1, Step 1: Create `angle_features.py` and `angle_utils.py`
 3. Then Phase 1, Step 3: Refactor `dtw_comparator.py` to support angle distance mode
 
