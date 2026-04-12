@@ -17,12 +17,14 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 ---
 
 ## Current State
-**2026-04-11** - v0.2.0 released on `main`. Clean baseline for Angle-Invariant Swing Analysis Sprint.
+**2026-04-12** - Phase 1 + Phase 2 of Angle-Invariant Swing Analysis Sprint merged to `main`.
 
-- **Phase 1 complete** on `sprint/angle-invariant-phase1`: angle_utils.py, angle_features.py, DTW angle distance mode, pipeline wiring with config flag
-- **Test suite**: 399 passing (48 new), 6 skipped, frontend builds clean
+- **Phase 1 (`f4d8580`)**: angle_utils.py, angle_features.py, DTW angle distance mode, pipeline wiring with `DISTANCE_MODE` config flag
+- **Phase 2 (`23a067b`)**: MediaPipe `world_landmarks` extraction, `pose_canonicalizer.py` (pelvis-centered, facing-normalized 3D), `projection.py` (orthographic 3D→2D), `canonical_landmarks_2d` JSON column on Analysis, frontend Angle-Normalized View toggle
+- **Test suite**: 431 passing (80 new across both phases), 6 skipped
 - **Default mode**: `DISTANCE_MODE=angle` (env var override, falls back to landmark when pro landmarks unavailable)
-- **Known limitation**: segment-angle estimates (shoulder_rotation_est, hip_rotation_est, trunk_lateral_tilt) are still camera-dependent 2D projections. Phase 2 (3D world_landmarks) fixes this.
+- **Migration**: `k7h8i9j0e234_add_canonical_landmarks_2d.py` adds the new JSON column. Apply with `uv run alembic upgrade head` before running the worker against an existing DB.
+- **Still TODO**: segment-angle features in `angle_features.py` (`shoulder_rotation_est`, `hip_rotation_est`, `trunk_lateral_tilt`) are still 2D projections. Phase 2 added the 3D infrastructure but didn't yet replace these features in the angle DTW path. Tuning checklist below covers this.
 
 ## Active Sprint: Angle-Invariant Swing Analysis (claude-bridge #1426)
 
@@ -60,9 +62,9 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 - Performance impact of 3D pose extraction on worker pipeline latency
 
 ## Next Task
-1. Begin Phase 2: 3D Pose Lifting & Canonical Overlay
-2. After Phase 2, validate and tune (see Post-Sprint Tuning Checklist below)
-3. Merge sprint branch to `main` after validation
+1. Run Post-Sprint Tuning Checklist below: validate angle mode against real swing videos and tune scale factors
+2. Replace 2D segment-angle estimates in `angle_features.py` with true 3D angles derived from `world_landmarks` (Phase 2 added the infrastructure but didn't wire it into the angle DTW feature set)
+3. Apply the canonical_landmarks_2d migration to Supabase before next prod deploy
 
 ## Post-Sprint Tuning Checklist (do after Phase 2)
 Run real swing videos through both distance modes and tune until scores match visual assessment.

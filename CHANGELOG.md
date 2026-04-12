@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-04-12] Angle-Invariant Scoring - Phase 2
+
+### Added
+- `pose_estimator.py` extracts MediaPipe `pose_world_landmarks` (3D, meter-scale, pelvis-relative) alongside 2D landmarks, with same gap-filling/interpolation
+- `pose_canonicalizer.py`: pelvis-centered, facing-direction-normalized 3D coordinate frame
+- `projection.py`: orthographic projection from canonical 3D back to 2D for canvas overlay
+- Non-fatal canonical pose pipeline step (5.6) in worker `tasks.py`
+- `canonical_landmarks_2d` JSON column on `Analysis` model + Alembic migration `k7h8i9j0e234`
+- `canonical_landmarks_2d` field on `OverlayResponse` API
+- Angle-Normalized View toggle in `DualSkeletonCanvas.jsx` and `ComparisonView.jsx`
+- 32 new tests: `test_3d_extraction.py`, `test_canonicalizer.py`, `test_projection.py`
+
 ## [2026-04-11] Angle-Invariant Scoring - Phase 1
 
 ### Added
