@@ -343,10 +343,28 @@ def process_analysis(analysis_id: str) -> None:
                 )
             logger.info("[%s] Pro reference loaded from filesystem (%.1fs)", analysis_id, time.perf_counter() - t0)
 
+        # 7.5. Convert pro landmarks to numpy for DTW angle mode and phase alignment
+        pro_landmarks_np: np.ndarray | None = None
+        if pro_landmarks_for_storage is not None:
+            pro_landmarks_np = np.array(pro_landmarks_for_storage, dtype=np.float32)
+
         # 8. DTW comparison
         t0 = time.perf_counter()
-        logger.info("[%s] Running DTW comparison", analysis_id)
-        comparison = compare_swing(features, pro_ref, fps=fps)
+        distance_mode = settings.distance_mode
+        # Fall back to landmark mode if angle mode requested but pro landmarks unavailable
+        if distance_mode == "angle" and pro_landmarks_np is None:
+            logger.warning(
+                "[%s] Angle mode requested but no pro landmarks available, falling back to landmark mode",
+                analysis_id,
+            )
+            distance_mode = "landmark"
+        logger.info("[%s] Running DTW comparison (mode=%s)", analysis_id, distance_mode)
+        comparison = compare_swing(
+            features, pro_ref, fps=fps,
+            distance_mode=distance_mode,
+            user_landmarks=pose_result.landmarks if distance_mode == "angle" else None,
+            pro_landmarks=pro_landmarks_np if distance_mode == "angle" else None,
+        )
         logger.info(
             "[%s] DTW done: overall_score=%.1f, deviations=%d (%.1fs)",
             analysis_id, comparison.overall_score, len(comparison.deviations),
@@ -368,10 +386,6 @@ def process_analysis(analysis_id: str) -> None:
         frame_mapping_list: list | None = None
         frame_deviations_list: list | None = None
         phase_boundaries_dict: dict | None = None
-
-        pro_landmarks_np: np.ndarray | None = None
-        if pro_landmarks_for_storage is not None:
-            pro_landmarks_np = np.array(pro_landmarks_for_storage, dtype=np.float32)
 
         if pro_landmarks_np is not None and pro_landmarks_np.ndim == 3:
             pro_phases = pro_ref.get("phases", {})
@@ -472,8 +486,9 @@ def process_analysis(analysis_id: str) -> None:
 
         processing_time_ms = int((time.perf_counter() - t_start) * 1000)
 
-        # Include swing tempo detail in phase_scores for frontend access
+        # Include swing tempo detail and distance mode in phase_scores for frontend access
         final_phase_scores = dict(comparison.phase_scores)
+        final_phase_scores["distance_mode"] = distance_mode
         if comparison.swing_tempo:
             final_phase_scores["swing_tempo_detail"] = comparison.swing_tempo
 

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Frame extraction
     frame_extraction_fps: int = 120  # target FPS for slow-mo video (iPhone 120/240fps)
 
+    # DTW comparison
+    distance_mode: str = "angle"  # 'landmark' (legacy) or 'angle' (camera-angle-invariant)
+
     # Pose estimation
     pose_min_detection_rate: float = 0.15
     pose_detection_confidence: float = 0.1

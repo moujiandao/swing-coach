@@ -13,9 +13,13 @@ from dataclasses import dataclass, field
 import numpy as np
 from tslearn.metrics import dtw, dtw_path
 
+from app.worker.angle_features import ANGLE_FEATURE_KEYS, VELOCITY_FEATURE_KEYS, extract_angle_features
 from app.worker.feature_engine import FeatureExtractionResult
 
 logger = logging.getLogger(__name__)
+
+# Valid distance modes for compare_swing
+DISTANCE_MODES = ("landmark", "angle")
 
 # ---------------------------------------------------------------------------
 # Tuning constants
@@ -31,6 +35,18 @@ _PHASE_SCALE_FACTORS: dict[str, float] = {
     "follow_through": 35.0,   # stricter - follow-through is a reliable indicator of form
 }
 _DEFAULT_SCALE_FACTOR = 50.0  # fallback for unlisted phases
+
+# Angle-mode scale factors: angles are in degrees (0-180 range) vs pixel-scale
+# landmarks, so the scale factors are much smaller. A 15-degree DTW distance
+# per frame is a meaningful deviation; 30+ is a major problem.
+_ANGLE_PHASE_SCALE_FACTORS: dict[str, float] = {
+    "preparation":    12.0,
+    "backswing":      15.0,   # more forgiving
+    "forward_swing":  12.0,
+    "contact":        10.0,   # stricter at contact
+    "follow_through":  8.0,   # strictest
+}
+_ANGLE_DEFAULT_SCALE_FACTOR = 12.0
 
 _PHASE_WEIGHTS: dict[str, float] = {
     "preparation":   0.05,
@@ -158,6 +174,9 @@ def compare_swing(
     user_features: FeatureExtractionResult,
     pro_reference: dict,           # from ProReferenceDB.get_reference()
     fps: float = 30.0,
+    distance_mode: str = "landmark",
+    user_landmarks: np.ndarray | None = None,
+    pro_landmarks: np.ndarray | None = None,
 ) -> ComparisonResult:
     """
     Compare user swing features against a pro reference using phase-segmented DTW.
@@ -166,17 +185,40 @@ def compare_swing(
         user_features: Output of extract_features() for the user's swing.
         pro_reference: Reference dict with keys "joint_angles" and "phases".
         fps: Frames per second (used for timing offset calculation).
+        distance_mode: 'landmark' (default, existing behavior) or 'angle'
+            (camera-angle-invariant joint angles).
+        user_landmarks: (N, 33, 3) raw landmarks, required when distance_mode='angle'.
+        pro_landmarks: (M, 33, 3) raw pro landmarks, required when distance_mode='angle'.
 
     Returns:
         ComparisonResult with overall_score, phase_scores, and deviations list.
     """
-    user_angles = user_features.joint_angles
-    user_phases = user_features.phases
-    user_velocities = user_features.velocities
+    if distance_mode not in DISTANCE_MODES:
+        raise ValueError(f"distance_mode must be one of {DISTANCE_MODES}, got '{distance_mode}'")
 
-    pro_angles: dict[str, np.ndarray] = pro_reference["joint_angles"]
+    # In angle mode, extract angle-invariant features from raw landmarks
+    if distance_mode == "angle":
+        if user_landmarks is None or pro_landmarks is None:
+            raise ValueError(
+                "distance_mode='angle' requires both user_landmarks and pro_landmarks"
+            )
+        user_angle_feats = extract_angle_features(user_landmarks, fps)
+        pro_angle_feats = extract_angle_features(pro_landmarks, fps)
+        # Use angle features for DTW comparison
+        user_angles = {k: v for k, v in user_angle_feats.items() if k in ANGLE_FEATURE_KEYS}
+        pro_angles = {k: v for k, v in pro_angle_feats.items() if k in ANGLE_FEATURE_KEYS}
+        # Use angle velocities in place of standard velocities
+        user_velocities = {k: v for k, v in user_angle_feats.items() if k in VELOCITY_FEATURE_KEYS}
+        pro_velocities = {k: v for k, v in pro_angle_feats.items() if k in VELOCITY_FEATURE_KEYS}
+        logger.info("DTW comparison using angle distance mode (%d angle features)", len(user_angles))
+    else:
+        user_angles = user_features.joint_angles
+        user_velocities = user_features.velocities
+        pro_angles = pro_reference["joint_angles"]
+        pro_velocities = pro_reference.get("velocities", {})
+
+    user_phases = user_features.phases
     pro_phases: dict[str, tuple[int, int]] = pro_reference["phases"]
-    pro_velocities: dict[str, np.ndarray] = pro_reference.get("velocities", {})
 
     # Only compare joints present in both
     common_joints = set(user_angles.keys()) & set(pro_angles.keys())
@@ -196,7 +238,10 @@ def compare_swing(
 
         u_start, u_end = user_phases[phase]
         p_start, p_end = pro_phases[phase]
-        phase_scale = _PHASE_SCALE_FACTORS.get(phase, _DEFAULT_SCALE_FACTOR)
+        if distance_mode == "angle":
+            phase_scale = _ANGLE_PHASE_SCALE_FACTORS.get(phase, _ANGLE_DEFAULT_SCALE_FACTOR)
+        else:
+            phase_scale = _PHASE_SCALE_FACTORS.get(phase, _DEFAULT_SCALE_FACTOR)
 
         joint_phase_scores: list[float] = []
 
@@ -230,34 +275,36 @@ def compare_swing(
                     description=_describe_deviation(joint, phase, mean_diff, severity),
                 ))
 
-        # Forward swing: also compare wrist_acceleration from velocities
+        # Forward swing: also compare velocity features
         if phase == "forward_swing":
-            user_accel = user_velocities.get("wrist_acceleration")
-            pro_accel = pro_velocities.get("wrist_acceleration")
-            if user_accel is not None and pro_accel is not None:
-                u_seg = user_accel[u_start: u_end + 1]
-                p_seg = pro_accel[p_start: p_end + 1]
+            # In angle mode, compare angular velocities; in landmark mode, compare wrist_acceleration
+            common_vel = set(user_velocities.keys()) & set(pro_velocities.keys())
+            for vel_key in sorted(common_vel):
+                u_vel = user_velocities[vel_key]
+                p_vel = pro_velocities[vel_key]
+                u_seg = u_vel[u_start: u_end + 1]
+                p_seg = p_vel[p_start: p_end + 1]
                 if len(u_seg) >= 2 and len(p_seg) >= 2:
                     tlen = max(len(u_seg), len(p_seg))
                     u_rs = _resample(u_seg, tlen)
                     p_rs = _resample(p_seg, tlen)
-                    accel_score = _dtw_score(u_rs, p_rs, scale_factor=phase_scale)
-                    joint_phase_scores.append(accel_score)
+                    vel_score = _dtw_score(u_rs, p_rs, scale_factor=phase_scale)
+                    joint_phase_scores.append(vel_score)
 
-                    severity = _classify_severity(accel_score)
+                    severity = _classify_severity(vel_score)
                     if severity is not None:
                         mean_diff = float(np.mean(u_rs - p_rs))
                         max_diff = float(np.max(np.abs(u_rs - p_rs)))
                         t_offset = _timing_offset_ms(u_rs, p_rs, fps)
                         all_deviations.append(Deviation(
-                            joint="wrist_acceleration",
+                            joint=vel_key,
                             phase=phase,
                             mean_diff_degrees=mean_diff,
                             max_diff_degrees=max_diff,
                             timing_offset_ms=t_offset,
                             severity=severity,
                             description=_describe_deviation(
-                                "wrist_acceleration", phase, mean_diff, severity
+                                vel_key, phase, mean_diff, severity
                             ),
                         ))
 
@@ -338,7 +385,8 @@ def compare_swing(
                 all_deviations.sort(key=lambda d: severity_order.get(d.severity, 9))
 
     logger.info(
-        "DTW comparison complete: overall=%.1f, phases=%s, deviations=%d, tempo=%s",
+        "DTW comparison complete: mode=%s, overall=%.1f, phases=%s, deviations=%d, tempo=%s",
+        distance_mode,
         overall,
         {p: f"{s:.1f}" for p, s in phase_scores.items()},
         len(all_deviations),

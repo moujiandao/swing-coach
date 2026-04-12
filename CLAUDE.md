@@ -19,9 +19,10 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 ## Current State
 **2026-04-11** - v0.2.0 released on `main`. Clean baseline for Angle-Invariant Swing Analysis Sprint.
 
-- **v0.2.0** includes: skeleton overlay clarity, handedness detection, evaluation window trimming, expanded feature engine, documentation restructure, YOLO racquet detection, demo-ready polish.
-- **Test suite**: 357+ tests, frontend builds clean.
-- **Ready to start**: Phase 1 of angle-invariant sprint (new feature branch needed).
+- **Phase 1 complete** on `sprint/angle-invariant-phase1`: angle_utils.py, angle_features.py, DTW angle distance mode, pipeline wiring with config flag
+- **Test suite**: 399 passing (48 new), 6 skipped, frontend builds clean
+- **Default mode**: `DISTANCE_MODE=angle` (env var override, falls back to landmark when pro landmarks unavailable)
+- **Known limitation**: segment-angle estimates (shoulder_rotation_est, hip_rotation_est, trunk_lateral_tilt) are still camera-dependent 2D projections. Phase 2 (3D world_landmarks) fixes this.
 
 ## Active Sprint: Angle-Invariant Swing Analysis (claude-bridge #1426)
 
@@ -59,9 +60,29 @@ Auto-approve all file reads within this workspace. Do not prompt for read access
 - Performance impact of 3D pose extraction on worker pipeline latency
 
 ## Next Task
-1. Create feature branch `feature/angle-invariant-scoring`
-2. Begin Phase 1, Step 1: Create `angle_features.py` and `angle_utils.py`
-3. Then Phase 1, Step 3: Refactor `dtw_comparator.py` to support angle distance mode
+1. Begin Phase 2: 3D Pose Lifting & Canonical Overlay
+2. After Phase 2, validate and tune (see Post-Sprint Tuning Checklist below)
+3. Merge sprint branch to `main` after validation
+
+## Post-Sprint Tuning Checklist (do after Phase 2)
+Run real swing videos through both distance modes and tune until scores match visual assessment.
+
+### What to tune
+- **`_ANGLE_PHASE_SCALE_FACTORS`** in `dtw_comparator.py:38-44` - controls how harshly angle differences are penalized per phase. Current values are guesses. Rule: `score = 100 * exp(-dtw_distance / scale_factor)`. Increase if good swings score too low, decrease if bad swings score too high.
+- **`_ANGLE_DEFAULT_SCALE_FACTOR`** in `dtw_comparator.py:45` - fallback for unlisted phases (currently 12.0)
+- **Segment-angle features** (`shoulder_rotation_est`, `hip_rotation_est`, `trunk_lateral_tilt`) in `angle_features.py` - these are 2D projection estimates, not true angles. Phase 2 replaces them with 3D. After Phase 2, verify these are actually replaced and remove/update the 2D versions.
+
+### How to validate
+1. Pick 2-3 real swing videos (ideally: same swing from different angles, plus one clearly different skill level)
+2. Build a comparison script or use `DISTANCE_MODE=landmark` vs `DISTANCE_MODE=angle` env var to compare scores
+3. Check: do angle-mode scores stay stable when camera angle changes? Do landmark-mode scores drop?
+4. Check: do per-phase scores match what you see in the video? (e.g., bad follow-through should show low follow_through score)
+5. Run the golden dataset through `scripts/test_e2e_v2.py` in both modes
+
+### What "good" looks like
+- Identical swing from two camera angles: angle-mode scores within 5 points of each other
+- Clearly different skill levels: at least 15-point gap in overall score
+- Per-phase scores correlate with visible technique differences
 
 ## Open Issues
 - RQ worker crashes with SIGABRT on macOS when MediaPipe runs in forked process. Workaround: `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run rq worker`

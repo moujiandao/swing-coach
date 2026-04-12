@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-04-11] Angle-Invariant Scoring - Phase 1
+
+### Added
+- `angle_utils.py` with geometric helpers: `compute_angle_3pt`, `compute_segment_angle`, `angular_velocity`
+- `angle_features.py` with camera-angle-invariant feature extraction: 9 angle features + 4 angular velocities per frame
+- `distance_mode` parameter on `compare_swing()`: 'landmark' (legacy) or 'angle' (new default)
+- Angle-mode scale factors tuned for degree-range DTW distances
+- `DISTANCE_MODE` config setting (env var override, defaults to 'angle')
+- Automatic fallback to landmark mode when pro landmarks are unavailable
+- `distance_mode` field in analysis response `phase_scores` for frontend visibility
+- 48 new tests: `test_angle_utils.py` (19), `test_angle_features.py` (11), `test_dtw_angle_mode.py` (11), `test_pipeline_angle_integration.py` (7)
+
+### Changed
+- DTW comparator forward_swing velocity comparison generalized to iterate over all common velocity keys (supports both wrist_acceleration in landmark mode and angular velocities in angle mode)
+
 ## [2026-04-11] v0.2.0 Release
 
 ### Summary
