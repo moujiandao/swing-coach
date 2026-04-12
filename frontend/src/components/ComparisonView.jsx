@@ -42,6 +42,7 @@ export default function ComparisonView({ overlayData }) {
     frame_mapping,
     pro_video_url,
     pro_fps,
+    canonical_landmarks_2d,
   } = overlayData
 
   const totalFrames = user_landmarks?.length ?? 1
@@ -54,6 +55,7 @@ export default function ComparisonView({ overlayData }) {
   const [showHelp, setShowHelp] = useState(false)
   const [alignSkeletons, setAlignSkeletons] = useState(true)
   const [videoSource, setVideoSource] = useState('student') // 'student' | 'pro'
+  const [useCanonicalView, setUseCanonicalView] = useState(false)
   const autoPlayedRef = useRef(false)
 
   // Canvas sizing via ResizeObserver
@@ -141,6 +143,10 @@ export default function ComparisonView({ overlayData }) {
         case 'a':
         case 'A':
           setAlignSkeletons((v) => !v)
+          break
+        case 'n':
+        case 'N':
+          if (canonical_landmarks_2d) setUseCanonicalView((v) => !v)
           break
         case 'v':
         case 'V':
@@ -262,6 +268,17 @@ export default function ComparisonView({ overlayData }) {
               />
               <span className="text-[#22C55E]">Align</span>
             </label>
+            {canonical_landmarks_2d && (
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={useCanonicalView}
+                  onChange={(e) => setUseCanonicalView(e.target.checked)}
+                  className="accent-[#A78BFA]"
+                />
+                <span className="text-[#A78BFA]">Angle-Normalized</span>
+              </label>
+            )}
 
             {/* Help button */}
             <button
@@ -295,6 +312,8 @@ export default function ComparisonView({ overlayData }) {
               videoTimeSeconds={videoSource === 'pro' ? proVideoTime : null}
               userLandmarks={user_landmarks}
               proLandmarks={pro_landmarks}
+              canonicalLandmarks={canonical_landmarks_2d}
+              useCanonicalView={useCanonicalView}
               frameDeviations={frame_deviations}
               landmarkConnections={landmark_connections}
               racquetConnections={racquet_connections}
@@ -324,6 +343,8 @@ export default function ComparisonView({ overlayData }) {
                   videoSrc={video_url || null}
                   userLandmarks={user_landmarks}
                   proLandmarks={null}
+                  canonicalLandmarks={canonical_landmarks_2d}
+                  useCanonicalView={useCanonicalView}
                   frameDeviations={frame_deviations}
                   landmarkConnections={landmark_connections}
                   racquetConnections={racquet_connections}

@@ -36,6 +36,8 @@ from app.worker.feedback_generator import generate_coaching_feedback
 from app.worker.frame_extractor import extract_frames
 from app.worker.phase_aligner import align_phases, resample_landmarks
 from app.worker.pose_estimator import extract_poses
+from app.worker.pose_canonicalizer import canonicalize
+from app.worker.projection import orthographic_project
 from app.worker.racquet_detector import detect_racquets, serialize_detections
 
 logger = logging.getLogger(__name__)
@@ -134,6 +136,7 @@ async def _write_results(
     detection_mask: list | None = None,
     racquet_data: list | None = None,
     pro_racquet_data: list | None = None,
+    canonical_landmarks_2d: list | None = None,
 ) -> None:
     async with get_session() as session:
         result = await session.execute(
@@ -156,6 +159,7 @@ async def _write_results(
         analysis.detection_mask = detection_mask
         analysis.racquet_data = racquet_data
         analysis.pro_racquet_data = pro_racquet_data
+        analysis.canonical_landmarks_2d = canonical_landmarks_2d
         analysis.completed_at = datetime.now(timezone.utc)
         analysis.processing_time_ms = processing_time_ms
 
@@ -244,6 +248,24 @@ def process_analysis(analysis_id: str) -> None:
             )
         except Exception as rq_exc:
             logger.warning("[%s] Racquet detection failed (non-fatal): %s", analysis_id, rq_exc)
+
+        # 5.6. Canonical 3D pose normalization (angle-invariant view) -- non-fatal
+        canonical_2d_serialized: list | None = None
+        try:
+            if pose_result.world_landmarks is not None:
+                t0 = time.perf_counter()
+                logger.info("[%s] Computing canonical 3D pose", analysis_id)
+                canonical_3d = canonicalize(pose_result.world_landmarks)
+                canonical_2d = orthographic_project(canonical_3d)
+                canonical_2d_serialized = np.round(canonical_2d, 4).tolist()
+                logger.info(
+                    "[%s] Canonical pose done: %d frames (%.1fs)",
+                    analysis_id, canonical_2d.shape[0], time.perf_counter() - t0,
+                )
+            else:
+                logger.info("[%s] No world landmarks available — skipping canonical pose", analysis_id)
+        except Exception as canon_exc:
+            logger.warning("[%s] Canonical pose computation failed (non-fatal): %s", analysis_id, canon_exc)
 
         # 6. Feature extraction
         t0 = time.perf_counter()
@@ -511,6 +533,7 @@ def process_analysis(analysis_id: str) -> None:
             detection_mask=detection_mask_list,
             racquet_data=racquet_data_serialized,
             pro_racquet_data=pro_racquet_data_serialized,
+            canonical_landmarks_2d=canonical_2d_serialized,
         ))
 
         logger.info(

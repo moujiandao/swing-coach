@@ -97,6 +97,9 @@ async def get_analysis_overlay(
             pro_video_url = generate_presigned_download_url(pro_ref.video_s3_key)
             pro_fps = pro_ref.fps
 
+    # Canonical landmarks (angle-normalized view) — may be null if world_landmarks unavailable
+    canonical_lm = _round_landmarks(analysis.canonical_landmarks_2d) if analysis.canonical_landmarks_2d else None
+
     payload = OverlayResponse(
         user_landmarks=user_lm,
         pro_landmarks=pro_lm,
@@ -109,6 +112,7 @@ async def get_analysis_overlay(
         detection_mask=analysis.detection_mask,
         racquet_data=analysis.racquet_data,
         pro_racquet_data=analysis.pro_racquet_data,
+        canonical_landmarks_2d=canonical_lm,
         video_url=generate_presigned_download_url(analysis.video_s3_key),
         keyframe_urls=_build_keyframe_urls(analysis.keyframe_s3_keys),
         pro_video_url=pro_video_url,

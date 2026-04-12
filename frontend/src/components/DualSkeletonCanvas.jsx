@@ -207,6 +207,8 @@ export default function DualSkeletonCanvas({
   videoSrc,
   userLandmarks,
   proLandmarks,
+  canonicalLandmarks = null,  // angle-normalized 2D landmarks (from 3D canonicalization)
+  useCanonicalView = false,   // when true, render canonical landmarks instead of raw user landmarks
   frameDeviations,
   landmarkConnections,
   phaseBoundaries,
@@ -244,10 +246,13 @@ export default function DualSkeletonCanvas({
 
   const renderRef = useRef(null)
 
-  const totalFrames = userLandmarks?.length ?? (proLandmarks?.length ?? 0)
+  // When canonical view is active and data is available, swap in canonical landmarks
+  const effectiveUserLandmarks = (useCanonicalView && canonicalLandmarks) ? canonicalLandmarks : userLandmarks
+
+  const totalFrames = effectiveUserLandmarks?.length ?? (proLandmarks?.length ?? 0)
 
   // Detect handedness once from all-frames wrist displacement
-  const userHand = useMemo(() => detectHandedness(userLandmarks), [userLandmarks])
+  const userHand = useMemo(() => detectHandedness(effectiveUserLandmarks), [effectiveUserLandmarks])
   const proHand  = useMemo(() => detectHandedness(proLandmarks),  [proLandmarks])
 
   const render = useCallback(() => {
@@ -269,16 +274,16 @@ export default function DualSkeletonCanvas({
     const frameDetected = !detectionMask || detectionMask[currentFrame] !== false
     const nextFrame = currentFrame + 1
     const t = localProgressRef.current
-    const hasNext = t > 0.001 && nextFrame < (userLandmarks?.length ?? 0)
+    const hasNext = t > 0.001 && nextFrame < (effectiveUserLandmarks?.length ?? 0)
     const nextDetected = !detectionMask || detectionMask[nextFrame] !== false
 
     // Interpolate between current and next frame for smooth playback
     let userLm, proLm
     if (hasNext && frameDetected && nextDetected) {
-      userLm = lerpLandmarks(userLandmarks?.[currentFrame], userLandmarks?.[nextFrame], t)
+      userLm = lerpLandmarks(effectiveUserLandmarks?.[currentFrame], effectiveUserLandmarks?.[nextFrame], t)
       proLm = lerpLandmarks(proLandmarks?.[currentFrame], proLandmarks?.[nextFrame], t)
     } else {
-      userLm = frameDetected ? userLandmarks?.[currentFrame] : null
+      userLm = frameDetected ? effectiveUserLandmarks?.[currentFrame] : null
       proLm = proLandmarks?.[currentFrame]
     }
     const frameDevs = getDeviationsForFrame(frameDeviations, currentFrame)
@@ -326,7 +331,7 @@ export default function DualSkeletonCanvas({
     visibleCtx.clearRect(0, 0, width, height)
     visibleCtx.drawImage(offscreenRef.current, 0, 0)
   }, [
-    userLandmarks, proLandmarks, frameDeviations, landmarkConnections, racquetConnections,
+    effectiveUserLandmarks, proLandmarks, frameDeviations, landmarkConnections, racquetConnections,
     phaseBoundaries, currentFrame, showUserSkeleton, showProSkeleton,
     showDeviations, alignSkeletons, anchorTo, detectionMask, width, height, totalFrames,
     userHand, proHand,

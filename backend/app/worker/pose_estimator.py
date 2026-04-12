@@ -102,6 +102,7 @@ class PoseEstimationResult:
     frames_processed: int
     frames_with_pose: int    # frames where a person was detected
     detection_rate: float    # frames_with_pose / frames_processed
+    world_landmarks: np.ndarray | None = None  # (num_frames, 33, 3) — real-world 3D coords in meters, pelvis-relative
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +239,7 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
 
     raw_landmarks: list[np.ndarray | None] = []
     raw_visibility: list[np.ndarray | None] = []
+    raw_world_landmarks: list[np.ndarray | None] = []
     detected: set[int] = set()
 
     with _PoseLandmarker.create_from_options(options) as landmarker:
@@ -278,10 +280,22 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
                 )
                 raw_landmarks.append(frame_lm)
                 raw_visibility.append(frame_vis)
+
+                # Extract 3D world landmarks (meter-scale, pelvis-relative)
+                if result.pose_world_landmarks and primary_idx < len(result.pose_world_landmarks):
+                    wlms = result.pose_world_landmarks[primary_idx]
+                    frame_wlm = np.array(
+                        [[lm.x, lm.y, lm.z] for lm in wlms], dtype=np.float32
+                    )
+                    raw_world_landmarks.append(frame_wlm)
+                else:
+                    raw_world_landmarks.append(None)
+
                 detected.add(i)
             else:
                 raw_landmarks.append(None)
                 raw_visibility.append(None)
+                raw_world_landmarks.append(None)
 
     total_frames = len(frame_paths)
     frames_with_pose = len(detected)
@@ -313,6 +327,7 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
     if trim_lead > 0 or trim_trail > 0:
         raw_landmarks = raw_landmarks[first_det : last_det + 1]
         raw_visibility = raw_visibility[first_det : last_det + 1]
+        raw_world_landmarks = raw_world_landmarks[first_det : last_det + 1]
         detected = {d - first_det for d in detected}
         logger.info(
             "Trimmed %d leading and %d trailing undetected frames",
@@ -324,6 +339,16 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
     landmarks_arr, visibility_arr = _interpolate_missing(
         raw_landmarks, raw_visibility, detected, frames_processed
     )
+
+    # Interpolate 3D world landmarks with the same gap-filling logic.
+    # Use a dummy visibility array (same shape) since world landmarks
+    # don't have separate visibility - they share the 2D visibility.
+    has_world = any(wl is not None for wl in raw_world_landmarks)
+    world_landmarks_arr = None
+    if has_world:
+        world_landmarks_arr, _ = _interpolate_missing(
+            raw_world_landmarks, raw_visibility, detected, frames_processed
+        )
 
     # Build detection mask: True for frames with real detections.
     detection_mask = np.zeros(frames_processed, dtype=bool)
@@ -337,4 +362,5 @@ def extract_poses(frame_paths: list[str]) -> PoseEstimationResult:
         frames_processed=frames_processed,
         frames_with_pose=frames_with_pose,
         detection_rate=detection_rate,
+        world_landmarks=world_landmarks_arr,
     )

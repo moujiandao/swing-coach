@@ -109,6 +109,8 @@ class Analysis(Base):
     racquet_data: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Pro reference racquet data (phase-aligned to user frame count)
     pro_racquet_data: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Canonical 2D landmarks from 3D pose normalization (angle-invariant view)
+    canonical_landmarks_2d: Mapped[Any | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -329,6 +331,8 @@ class OverlayResponse(BaseModel):
     # Presigned URLs generated at request time for video playback
     video_url: str | None = None
     keyframe_urls: dict | None = None
+    # Canonical 2D landmarks from 3D pose normalization (angle-invariant overlay)
+    canonical_landmarks_2d: list | None = None
     # Pro reference video — only present when pro_reference_id is set and video was uploaded
     pro_video_url: str | None = None
     pro_fps: float | None = None
